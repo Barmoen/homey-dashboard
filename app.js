@@ -255,11 +255,17 @@
   // Waste collection apps (Min Renovasjon, Renovasjon, Norske Tjenester …) show up as devices.
   function isWaste(d) { return /renovasjon|avfall|tømme|tomme|søppel|soppel|waste|garbage|trash|norske.?tjenester/i.test(d.driverId + ' ' + d.name); }
   function isVacuum(d) { return d.class === 'vacuumcleaner' || has(d, 'vacuumcleaner_state') || /roborock|vacuum|støvsug/i.test(d.driverId); }
+  function isEV(d) { return d.class === 'evcharger' || has(d, 'evcharger_charging_state'); }
+  // Weather-station style devices (Yr/MET apps) report outdoor values; keep them out of rooms and indoor averages.
+  function isWeatherDevice(d) { return has(d, 'weather_description') || has(d, 'measure_wind_strength1') || has(d, 'forecast_time') || /værvarsel|weather|^yr\b|met\.no/i.test(d.name + ' ' + d.driverId); }
+  // Whole-home meters: Tibber Pulse, HAN/P1 readers, or anything Homey marks as cumulative.
+  function isMainMeter(d) { return d.cumulative || has(d, 'meter_power.imported') || /pulse|han[- ]?port|\bp1\b|tibber|strømmåler|watty|futurehome/i.test(d.name + ' ' + d.driverId); }
+  function indoorTempDevice(d) { return typeof val(d, 'measure_temperature') === 'number' && !isWeatherDevice(d) && !isWaste(d); }
 
   // Which devices show up automatically before the user picks.
   function autoShown(d) {
-    if (isWaste(d)) return false;
-    if (isVacuum(d)) return true;
+    if (isWaste(d) || isWeatherDevice(d)) return false;
+    if (isVacuum(d) || isEV(d)) return true;
     if (['light', 'thermostat', 'lock', 'windowcoverings', 'blinds', 'curtain', 'heater', 'socket', 'fan'].indexOf(d.class) >= 0) return true;
     return has(d, 'measure_temperature') || has(d, 'alarm_contact') || has(d, 'alarm_motion') || has(d, 'alarm_water');
   }
@@ -268,6 +274,7 @@
   // ---------------------------------------------------------------- tile model
   function kind(d) {
     if (isVacuum(d)) return 'vacuum';
+    if (isEV(d)) return 'ev';
     if (has(d, 'target_temperature')) return 'thermostat';
     if (has(d, 'locked')) return 'lock';
     if (has(d, 'windowcoverings_set') || has(d, 'windowcoverings_state')) return 'cover';
@@ -278,7 +285,9 @@
   function deviceIcon(d) {
     var c = d.class;
     if (isVacuum(d)) return 'vacuum';
+    if (isEV(d)) return 'car';
     if (isWaste(d)) return 'trash';
+    if (isWeatherDevice(d)) return 'cloud';
     if (c === 'light') return 'bulb';
     if (c === 'socket') return 'plug';
     if (c === 'thermostat' || c === 'heater') return 'thermo';
@@ -301,16 +310,45 @@
 
   var VAC_STATES = { cleaning: 'Støvsuger', spot_cleaning: 'Punktrengjøring', docked: 'I dokken', charging: 'Lader', stopped: 'Stoppet',
     returning: 'På vei hjem', paused: 'Pause', error: 'Feil', idle: 'Klar' };
+  var VAC_ALARMS = [
+    ['alarm_stuck', 'sitter fast', function (n) { return n + ' sitter fast'; }],
+    ['alarm_bin_full', 'støvbeholderen er full', function (n) { return 'Støvbeholderen på ' + n + ' er full'; }],
+    ['alarm_water_box_empty', 'vanntanken er tom', function (n) { return 'Vanntanken på ' + n + ' er tom'; }],
+    ['alarm_tank_empty', 'rentvannstanken er tom', function (n) { return 'Rentvannstanken på ' + n + ' er tom'; }],
+    ['alarm_tank_full', 'skittentvannstanken er full', function (n) { return 'Skittentvannstanken på ' + n + ' er full'; }],
+    ['alarm_problem', 'har et problem', function (n) { return n + ' har et problem'; }]
+  ];
+  function vacSetable(d, c) { return has(d, c) && d.capabilitiesObj[c].setable === true; }
+  function vacuumAlarms(d) { return VAC_ALARMS.filter(function (a) { return val(d, a[0]) === true; }); }
   function vacuumState(d) {
+    var al = vacuumAlarms(d);
+    if (al.length) return cap1(al[0][1]);
     var s = val(d, 'vacuumcleaner_state');
     if (s != null) return VAC_STATES[s] || cap1(String(s).replace(/_/g, ' '));
+    if (val(d, 'is_cleaning') === true) return val(d, 'pause_clean') === true ? 'Pause' : 'Støvsuger';
+    if (has(d, 'is_cleaning')) {
+      var cs = val(d, 'battery_charging_state');
+      if (cs === 'charging') return 'Lader';
+      if (val(d, 'dock') === true || cs === 'charged' || cs === 'full') return 'I dokken';
+      return 'Klar';
+    }
     if (has(d, 'onoff')) return val(d, 'onoff') ? 'Støvsuger' : 'Av';
     return genericState(d) || '';
   }
   function vacuumBusy(d) {
     var s = val(d, 'vacuumcleaner_state');
-    return s === 'cleaning' || s === 'spot_cleaning' || (s == null && val(d, 'onoff') === true);
+    return s === 'cleaning' || s === 'spot_cleaning' || val(d, 'is_cleaning') === true || (s == null && !has(d, 'is_cleaning') && val(d, 'onoff') === true);
   }
+  var EV_STATES = { plugged_out: 'Ikke tilkoblet', plugged_in: 'Tilkoblet', plugged_in_charging: 'Lader', plugged_in_paused: 'Pause', plugged_in_discharging: 'Utlader' };
+  function evState(d) {
+    var s = val(d, 'evcharger_charging_state');
+    if (s != null) return EV_STATES[s] || cap1(String(s).replace(/_/g, ' '));
+    if (val(d, 'evcharger_charging') === true) return 'Lader';
+    var st = val(d, 'charger_status');
+    return st ? String(st) : '';
+  }
+  function evCharging(d) { return val(d, 'evcharger_charging_state') === 'plugged_in_charging' || val(d, 'evcharger_charging') === true; }
+  function fmtPower(w) { return Math.abs(w) >= 1000 ? fmtNum(w / 1000, 1) + ' kW' : fmtNum(w, 0) + ' W'; }
 
   // Capabilities the dashboard understands; anything else is shown as "title: value".
   var KNOWN = /^(onoff|dim|light_.*|measure_temperature|target_temperature|measure_humidity|alarm_.*|locked|measure_power|meter_power.*|windowcoverings_.*|measure_luminance|measure_co2|measure_battery|vacuumcleaner_state|volume_.*|speaker_.*|button.*|thermostat_mode)$/;
@@ -332,9 +370,14 @@
   function describe(d) {
     var k = kind(d), out = { cls: '', big: '', state: '', corner: '', bar: null };
     var alarm = ['alarm_water', 'alarm_smoke', 'alarm_co', 'alarm_tamper'].filter(function (a) { return val(d, a) === true; });
-    if (k === 'vacuum') {
+    if (k === 'ev') {
+      out.state = evState(d);
+      if (evCharging(d)) out.cls = 'on';
+      if (typeof val(d, 'measure_power') === 'number' && val(d, 'measure_power') > 0) out.corner = fmtPower(val(d, 'measure_power'));
+    } else if (k === 'vacuum') {
       out.state = vacuumState(d);
       if (vacuumBusy(d)) out.cls = 'on';
+      if (vacuumAlarms(d).length) out.cls = 'alert';
       if (typeof val(d, 'measure_battery') === 'number') out.corner = fmtNum(val(d, 'measure_battery'), 0) + ' %';
     } else if (k === 'switch' || k === 'dimmer') {
       var on = k === 'switch' ? !!val(d, 'onoff') : val(d, 'dim') > 0;
@@ -414,13 +457,19 @@
     if ((m = s.match(/(?:om\s*)?(\d+)\s*dag/i))) return { days: +m[1] };
     return { raw: s };
   }
+  var FRACTIONS = { general: 'Restavfall', rest: 'Restavfall', residual: 'Restavfall', food: 'Matavfall', bio: 'Matavfall', organic: 'Matavfall',
+    paper: 'Papp og papir', cardboard: 'Papp og papir', plastic: 'Plast', glass: 'Glass og metall', metal: 'Glass og metall', garden: 'Hageavfall', textile: 'Tekstiler', hazardous: 'Farlig avfall' };
   function pickupsOf(d) {
-    var out = [];
-    Object.keys(d.capabilitiesObj).forEach(function (c) {
+    var out = [], caps = Object.keys(d.capabilitiesObj);
+    // Apps that report one value per fraction (pickup_glass, pickup_food …) also add summary fields
+    // (pickup_next, pickup_next_days …); use only the per-fraction ones so nothing shows twice.
+    var perFraction = caps.filter(function (c) { return /^pickup_(?!next)/.test(c); });
+    (perFraction.length ? perFraction : caps).forEach(function (c) {
       if (/^(measure_battery|alarm_|onoff$|button)/.test(c)) return;
       var co = d.capabilitiesObj[c], r = parsePickup(co.value, co.units, c + ' ' + (co.title || ''));
       if (!r) return;
-      var label = String(co.title || d.name).replace(/^(neste|next)\s+/i, '').replace(/\s*\((dager|days)\)\s*$/i, '');
+      var key = c.replace(/^pickup_/, '').split(/[_.]/)[0];
+      var label = String(FRACTIONS[key] || co.title || d.name).replace(/^(neste|next)\s+/i, '').replace(/\s*\((dager|days)\)\s*$/i, '');
       if (r.date) r.days = daysFromToday(r.date);
       if (r.days != null && r.days < 0) return;
       out.push({ d: d, label: label, days: r.days, raw: r.raw, when: r.days != null ? dayWord(r.days, r.date) : r.raw });
@@ -430,6 +479,14 @@
   function allPickups() {
     var list = [];
     allDevices().filter(isWaste).forEach(function (d) { list = list.concat(pickupsOf(d)); });
+    if (list.some(function (p) { return p.days != null; })) list = list.filter(function (p) { return p.days != null; });
+    // Fractions collected on the same day are merged: "Restavfall og matavfall i morgen".
+    var byDay = {};
+    list = list.filter(function (p) {
+      if (p.days == null) return true;
+      if (byDay[p.days]) { if (byDay[p.days].label.toLowerCase().indexOf(p.label.toLowerCase()) < 0) byDay[p.days].label += ' og ' + p.label.toLowerCase(); return false; }
+      byDay[p.days] = p = Object.assign(p, {}); return true;
+    });
     return list.filter(function (p) { return p.days == null || p.days <= 14; })
       .sort(function (a, b) { return (a.days == null ? 999 : a.days) - (b.days == null ? 999 : b.days); });
   }
@@ -611,7 +668,20 @@
   function allDevices() { return Object.keys(state.devices).map(function (k) { return state.devices[k]; }); }
   function shownDevices() { return allDevices().filter(isShown); }
   function kindRank(d) { return { switch: 0, dimmer: 0, thermostat: 1, vacuum: 2, cover: 2, lock: 3, sensor: 4 }[kind(d)]; }
-  function zoneName(zid) { return state.zones[zid] ? state.zones[zid].name : 'Annet'; }
+  function zoneName(zid) {
+    var z = state.zones[zid];
+    if (!z) return 'Annet';
+    var twin = Object.keys(state.zones).some(function (k) { return k !== zid && state.zones[k].name === z.name; });
+    var parent = twin && z.parent && state.zones[z.parent];
+    return parent ? z.name + ' ' + shortFloor(parent.name) : z.name;
+  }
+  function shortFloor(n) {
+    var m = String(n).toLowerCase();
+    if (/første|1\.? ?etg|1\.? ?etasje|first|ground/.test(m)) return 'nede';
+    if (/andre|2\.? ?etg|2\.? ?etasje|second|upper/.test(m)) return 'oppe';
+    if (/kjeller|basement/.test(m)) return 'kjeller';
+    return '(' + n + ')';
+  }
   function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
   function joinNames(a) {
     if (a.length <= 1) return a.join('');
@@ -630,6 +700,9 @@
         if (val(d, a) === true) out.push({ d: d, level: 3, text: d.name + ' (' + zoneName(d.zone) + ') melder ' + { alarm_water: 'vannlekkasje', alarm_smoke: 'røyk', alarm_co: 'kullos' }[a] });
       });
     });
+    allDevices().filter(isVacuum).forEach(function (d) {
+      vacuumAlarms(d).forEach(function (a) { out.push({ d: d, level: 2, icon: 'vacuum', text: a[2](d.name) }); });
+    });
     shownDevices().forEach(function (d) {
       if (val(d, 'alarm_contact') === true) out.push({ d: d, level: 2, text: d.name + ' i ' + zoneName(d.zone) + ' står ' + (/vindu|vindauge|window/i.test(d.name) ? 'åpent' : 'åpen') });
       if (val(d, 'locked') === false) out.push({ d: d, level: 2, text: d.name + ' er ulåst' });
@@ -639,18 +712,19 @@
   function powerInfo() {
     var all = allDevices().filter(function (d) { return typeof val(d, 'measure_power') === 'number'; });
     if (!all.length) return null;
-    var meters = all.filter(function (d) { return d.cumulative; });   // a main meter measures the whole home
+    var meters = all.filter(isMainMeter);   // a main meter measures the whole home, so don't add devices on top
     var w = (meters.length ? meters : all).reduce(function (s, d) { return s + val(d, 'measure_power'); }, 0);
-    return Math.abs(w) >= 1000 ? fmtNum(w / 1000, 1) + ' kW' : fmtNum(w, 0) + ' W';
+    return fmtPower(w);
   }
   function roomTemp(zid) {
-    var pick = function (list) { return list.filter(function (d) { return d.zone === zid && typeof val(d, 'measure_temperature') === 'number'; }); };
+    var pick = function (list) { return list.filter(function (d) { return d.zone === zid && indoorTempDevice(d); }); };
     var l = pick(shownDevices());
     if (!l.length) l = pick(allDevices());
     return l.length ? avg(l.map(function (d) { return val(d, 'measure_temperature'); })) : null;
   }
   function insideTemp() {
-    var l = shownDevices().filter(function (d) { return typeof val(d, 'measure_temperature') === 'number'; });
+    var l = shownDevices().filter(indoorTempDevice);
+    if (!l.length) l = allDevices().filter(indoorTempDevice);
     return l.length ? avg(l.map(function (d) { return val(d, 'measure_temperature'); })) : null;
   }
 
@@ -716,7 +790,7 @@
     }
     var al = alerts();
     al.slice(0, 3).forEach(function (a) {
-      h += '<button class="s-alert" data-dev="' + esc(a.d.id) + '">' + icon(a.level > 2 ? 'smoke' : 'doorOpen') + '<span>' + esc(a.text) + '.</span>' + icon('chev') + '</button>';
+      h += '<button class="s-alert" data-dev="' + esc(a.d.id) + '">' + icon(a.icon || (a.level > 2 ? 'smoke' : 'doorOpen')) + '<span>' + esc(a.text) + '.</span>' + icon('chev') + '</button>';
     });
     if (al.length > 3) h += '<div class="s-more">og ' + (al.length - 3) + ' til</div>';
 
@@ -724,6 +798,10 @@
     var extras = '';
     allDevices().filter(function (d) { return isVacuum(d) && vacuumBusy(d); }).forEach(function (d) {
       extras += '<button class="s-info" data-dev="' + esc(d.id) + '">' + icon('vacuum') + '<span>' + esc(d.name) + ' støvsuger nå</span></button>';
+    });
+    allDevices().filter(function (d) { return isEV(d) && evCharging(d); }).forEach(function (d) {
+      var w = val(d, 'measure_power');
+      extras += '<button class="s-info ev" data-dev="' + esc(d.id) + '">' + icon('car') + '<span>Bilen lader' + (typeof w === 'number' && w > 0 ? ' · ' + fmtPower(w) : '') + '</span></button>';
     });
     if (!al.length && !extras && shownDevices().some(function (d) { return has(d, 'alarm_contact') || has(d, 'locked'); })) {
       h += '<div class="s-calm">Dører og vinduer er lukket.</div>';
@@ -795,7 +873,7 @@
 
   // ---- room bar
   var ROOM_RULES = [
-    [/living|stue|lounge|family/i, 'sofa'], [/kitchen|kjøkken|kjokken/i, 'pot'], [/bed|sov|master|guest|gjeste|kid|barn|nursery/i, 'bed'],
+    [/spise|dining/i, 'cutlery'], [/living|stue|lounge|family/i, 'sofa'], [/kitchen|kjøkken|kjokken/i, 'pot'], [/bed|sov|master|guest|gjeste|kid|barn|nursery/i, 'bed'],
     [/bath|bad|wc|toilet|toalett|laundry|vask/i, 'bath'], [/office|kontor|study|arbeid|work/i, 'monitor'],
     [/hall|gang|entr|corridor|stair|trapp|vindfang/i, 'door'], [/garage|garasje|carport/i, 'car'],
     [/garden|hage|outside|ute|terrass|balcon|balkong|patio|yard/i, 'tree']
@@ -1138,7 +1216,7 @@
     alarm_water: 'Vann', alarm_smoke: 'Røyk', alarm_co: 'Kullos', alarm_battery: 'Batteri', alarm_tamper: 'Sabotasje'
   };
   // Controls drawn as buttons/sliders in the sheet, so not repeated as rows.
-  var CONTROLLED = /^(onoff|dim|target_temperature|windowcoverings_.*|locked|vacuumcleaner_state)$/;
+  var CONTROLLED = /^(onoff|dim|target_temperature|windowcoverings_.*|locked|vacuumcleaner_state|button\..*|clean_full|pause_clean|cancel_and_dock|dock|locate|spot_clean|clean_room_pick|position_[xy]|evcharger_charging)$/;
   function readable(d, c) {
     var v = val(d, c);
     if (typeof v === 'boolean') {
@@ -1156,6 +1234,14 @@
     if (!d) return closeSheet();
     var k = kind(d), h = '';
     h += '<h2>' + esc(d.name) + '</h2><div class="sub">' + esc(zoneName(d.zone)) + (d.available ? '' : ' · utilgjengelig') + '</div>';
+    if (k === 'ev') {
+      h += '<div class="vac-state">' + icon('car') + '<span>' + esc(evState(d)) + '</span>' +
+        (typeof val(d, 'measure_power') === 'number' ? '<span class="vac-bat">' + fmtPower(val(d, 'measure_power')) + '</span>' : '') + '</div>';
+      if (vacSetable(d, 'evcharger_charging')) {
+        var chg = !!val(d, 'evcharger_charging');
+        h += '<button class="big-toggle' + (chg ? ' on' : '') + '" data-act="ev-toggle">' + (chg ? 'Lader – trykk for å stoppe' : 'Start lading') + '</button>';
+      }
+    }
     if (k === 'vacuum') {
       h += '<div class="vac-state">' + icon('vacuum') + '<span>' + esc(vacuumState(d)) + '</span>' +
         (typeof val(d, 'measure_battery') === 'number' ? '<span class="vac-bat">' + fmtNum(val(d, 'measure_battery'), 0) + ' %</span>' : '') + '</div>';
@@ -1163,11 +1249,16 @@
         h += '<div class="btn-row"><button class="btn" data-act="vac-cleaning">' + icon('play') + 'Start</button>' +
           '<button class="btn" data-act="vac-stopped">' + icon('stop') + 'Stopp</button>' +
           '<button class="btn" data-act="vac-docked">' + icon('home') + 'Til dokken</button></div>';
+      } else if (vacSetable(d, 'clean_full') || vacSetable(d, 'cancel_and_dock') || vacSetable(d, 'pause_clean')) {
+        h += '<div class="btn-row">' +
+          (vacSetable(d, 'clean_full') ? '<button class="btn" data-act="vcap-clean_full">' + icon('play') + 'Start</button>' : '') +
+          (vacSetable(d, 'pause_clean') ? '<button class="btn" data-act="vcap-pause_clean">' + icon('stop') + 'Pause</button>' : '') +
+          (vacSetable(d, 'cancel_and_dock') ? '<button class="btn" data-act="vcap-cancel_and_dock">' + icon('home') + 'Til dokken</button>' : '') + '</div>';
       } else if (has(d, 'onoff')) {
         var von = !!val(d, 'onoff');
         h += '<button class="big-toggle' + (von ? ' on' : '') + '" data-act="toggle">' + (von ? 'Støvsuger – trykk for å stoppe' : 'Start støvsuging') + '</button>';
       }
-    } else if (has(d, 'onoff')) {
+    } else if (has(d, 'onoff') && k !== 'ev') {
       var on = !!val(d, 'onoff');
       h += '<button class="big-toggle' + (on ? ' on' : '') + '" data-act="toggle">' + (on ? 'På' : 'Av') + '</button>';
     }
@@ -1223,8 +1314,10 @@
     if (!d) return;
     if (act === 'close') return closeSheet();
     if (act === 'toggle') return setCap(d.id, 'onoff', !val(d, 'onoff'));
+    if (act === 'ev-toggle') return setCap(d.id, 'evcharger_charging', !val(d, 'evcharger_charging'));
     if (act === 'lock') return primaryAction(d);
     if (act.indexOf('vac-') === 0) return setCap(d.id, 'vacuumcleaner_state', act.slice(4));
+    if (act.indexOf('vcap-') === 0) return setCap(d.id, act.slice(5), true);
     if (act === 'tminus' || act === 'tplus') {
       var c = d.capabilitiesObj.target_temperature, step = c.step || 0.5;
       var min = c.min != null ? c.min : 5, max = c.max != null ? c.max : 35;
@@ -1414,6 +1507,7 @@
       var fid = t.getAttribute('data-flow'), f = state.flows.filter(function (x) { return x.id === fid; })[0];
       cfg.scenes = (cfg.scenes || []).filter(function (x) { return x.id !== fid; });
       if (t.checked && f) cfg.scenes.push(f);
+      cfg.scenesChosen = true;
       saveConfig();
     } else if (t.hasAttribute('data-todo')) {
       var pid = t.getAttribute('data-todo');
@@ -1546,6 +1640,7 @@
         // Drop scenes whose flows no longer exist.
         var ids = state.flows.map(function (f) { return f.id; });
         cfg.scenes = (cfg.scenes || []).filter(function (s) { return ids.indexOf(s.id) >= 0; });
+        if (!cfg.scenesChosen && !cfg.scenes.length && !cfg.demo) { cfg.scenes = state.flows.slice(0, 6); saveConfig(); }
         renderAll();
         // Live updates for every capability of every device, so nothing needs a reconnect.
         Object.keys(state.devices).forEach(function (id) {

@@ -3,7 +3,8 @@
   'use strict';
 
   function cap(value, extra) { return Object.assign({ value: value }, extra || {}); }
-  function inDays(n) { var d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+  // Same format as the Renovasjon app: "man. 16. nov."
+  function inDays(n) { var d = new Date(); d.setDate(d.getDate() + n); return d.toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' }); }
 
   function makeDevices() {
     var list = [
@@ -23,14 +24,17 @@
       ['d14', 'Skrivebordslampe', 'office', 'light', { onoff: cap(true), dim: cap(0.85) }],
       ['d15', 'Vindu', 'office', 'sensor', { alarm_contact: cap(true) }],
       ['d16', 'Varmekabler', 'bath', 'thermostat', { measure_temperature: cap(23.1, { units: '°C' }), target_temperature: cap(24, { units: '°C', min: 5, max: 35, step: 0.5 }), onoff: cap(true) }],
-      ['d17', 'Strømmåler', 'home', 'sensor', { measure_power: cap(1840, { units: 'W' }) }],
-      ['d18', 'Roborock S8', 'living', 'vacuumcleaner', { vacuumcleaner_state: cap('cleaning', { setable: true }), measure_battery: cap(78, { units: '%' }) }],
-      ['d19', 'Tømmekalender', 'home', 'other', {
-        next_rest: cap(inDays(1), { title: 'Restavfall' }),
-        next_paper: cap(inDays(4), { title: 'Papp og papir' }),
-        next_plastic: cap(inDays(9), { title: 'Plastemballasje' }),
-        days_glass: cap(17, { title: 'Glass og metall', units: 'dager' })
-      }]
+      ['d17', 'Pulse', 'home', 'other', { measure_power: cap(1840, { units: 'W' }), 'meter_power.imported': cap(275296, { units: 'kWh' }) }],
+      ['d18', 'Saros 10', 'living', 'vacuumcleaner', { is_cleaning: cap(true), measure_battery: cap(78, { units: '%' }), battery_charging_state: cap('discharging'),
+        alarm_stuck: cap(false), alarm_bin_full: cap(false), alarm_water_box_empty: cap(false), dock: cap(false), clean_time: cap(1.21),
+        clean_full: cap(false, { setable: true }), pause_clean: cap(false, { setable: true }), cancel_and_dock: cap(null, { setable: true }) }],
+      ['d19', 'Renovasjon', 'home', 'sensor', {
+        pickup_glass: cap(inDays(9)), pickup_food: cap(inDays(1)), pickup_paper: cap(inDays(23)), pickup_plastic: cap(inDays(9)),
+        pickup_general: cap(inDays(1)), pickup_next_fractions: cap('Restavfall, Matavfall'), pickup_next_date: cap(inDays(1)),
+        pickup_next_days: cap(1), pickup_next: cap(inDays(1))
+      }],
+      ['d20', 'Værvarsel', 'home', 'sensor', { weather_description: cap('Lettskyet'), measure_temperature: cap(-3.4, { units: '°C' }), measure_wind_strength1: cap(2.2) }],
+      ['d21', 'Billader', 'garage', 'evcharger', { evcharger_charging_state: cap('plugged_in_charging'), evcharger_charging: cap(true, { setable: true }), measure_power: cap(7200, { units: 'W' }) }]
     ];
     var out = {};
     list.forEach(function (r) {
@@ -39,6 +43,7 @@
     out.d17.energyObj = { cumulative: true };   // behaves like a P1 / HAN whole-home meter
     out.d18.driverId = 'homey:app:com.roborock.roborock:vacuum';
     out.d19.driverId = 'homey:app:no.renovasjon:renovasjon';
+    out.d17.driverId = 'homey:app:com.tibber:pulse';
     return out;
   }
 
@@ -86,7 +91,8 @@
       hall: { id: 'hall', name: 'Gang', parent: 'home' },
       bedroom: { id: 'bedroom', name: 'Soverom', parent: 'home' },
       office: { id: 'office', name: 'Kontor', parent: 'home' },
-      bath: { id: 'bath', name: 'Bad', parent: 'home' }
+      bath: { id: 'bath', name: 'Bad', parent: 'home' },
+      garage: { id: 'garage', name: 'Garasje', parent: 'home' }
     });
   };
 
@@ -98,7 +104,8 @@
       { id: 'f2', name: 'Går ut', type: 'advanced' },
       { id: 'f3', name: 'Middag', type: 'basic' },
       { id: 'f4', name: 'Filmkveld', type: 'advanced' },
-      { id: 'f5', name: 'God natt', type: 'basic' }
+      { id: 'f5', name: 'God natt', type: 'basic' },
+      { id: 'f6', name: 'Støvsug huset', type: 'basic' }
     ]);
   };
 
