@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body>
   <div id="app">
@@ -21,21 +21,31 @@
         <div class="time" id="time">--:--</div>
         <div class="date" id="date"></div>
       </div>
-      <div class="chips" id="chips"></div>
-      <div class="presence" id="presence"></div>
-      <div class="top-actions">
+      <div class="top-right">
+       <div class="top-actions">
+        <div class="presence" id="presence"></div>
         <span class="conn" id="conn" title="Connection"></span>
         <button class="icon-btn" id="settingsBtn" aria-label="Settings (hold)">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         </button>
+       </div>
+       <div class="meta" id="meta"></div>
       </div>
     </header>
 
-    <section class="hero" id="hero"></section>
+    <section class="status" id="status" aria-live="polite"></section>
 
     <nav class="scenes" id="scenes"></nav>
 
-    <main class="rooms" id="rooms"></main>
+    <nav class="roombar" id="roombar"></nav>
+  </div>
+
+  <!-- Room panel: slides up with the devices of one room -->
+  <div class="backdrop room-backdrop" id="roomBackdrop" hidden>
+    <div class="room-panel" role="dialog" aria-modal="true">
+      <div class="room-head" id="roomHead"></div>
+      <main class="rooms" id="rooms"></main>
+    </div>
   </div>
 
   <!-- Device detail sheet -->
@@ -68,7 +78,7 @@
   <div class="toast" id="toast" hidden></div>
 
   <script src="vendor/homey-api.min.js"></script>
-  <script src="demo.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="demo.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

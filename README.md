@@ -3,12 +3,13 @@
 A touch dashboard made for an iPad on the wall. It talks **directly to your Homey Pro on your home network**, so no extra server is needed. Changes show up live: when a light turns on anywhere, its tile updates right away.
 
 **What it shows**
-- Clock, date and who is home
-- Overview cards: outside temperature, average inside temperature, live power use (your main meter if you have a P1/HAN reader, otherwise the devices that measure power) and lights on (tap to turn them all off)
-- Scene buttons that start your Homey flows
-- One grid of device tiles, with the room shown on each: tap to toggle lights and sockets, **hold** a tile for brightness, thermostat, blinds and sensor details. Order them by type or by room in settings.
-- Alert chips: doors and windows open, unlocked locks, water or smoke alarms
-- Leaves room for the iPad status bar (adjustable in settings → Display)
+
+A calm home screen you can read from across the room:
+- A large clock and date, with weather, inside temperature, power use and who is home in the corner
+- One sentence about the house: which lights are on (with a *Turn off* button), plus anything that needs attention, such as an open window, an unlocked door, or water or smoke. Tap an alert to see that device.
+- Round scene buttons for your Homey flows. The one that fits the time of day is highlighted (it recognises names like *morning*, *leaving*, *dinner*, *movie* and *night*, in English or Norwegian).
+- A row of rooms at the bottom. Rooms with lights on glow, and rooms with an alert get a red edge. Tap a room, or the grid icon for everything, to slide up its devices: tap a tile to toggle it, **hold** it for brightness, thermostat, blinds and sensor details.
+- Open panels close by themselves after a minute without touches, so the panel always falls back to the calm view.
 - A screensaver clock after a few minutes idle, which goes very dark during night hours
 - Reloads itself every night at 04:00, so it keeps running for weeks
 

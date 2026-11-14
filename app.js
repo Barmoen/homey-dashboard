@@ -116,7 +116,21 @@
     moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
     up: '<path d="M6 15l6-6 6 6"/>',
     down: '<path d="M6 9l6 6 6-6"/>',
-    stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>'
+    stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>',
+    x: '<path d="M6 6l12 12M18 6 6 18"/>',
+    chev: '<path d="M9 6l6 6-6 6"/>',
+    grid: '<rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/>',
+    home: '<path d="M3.5 11 12 4l8.5 7M5.5 9.5V20h13V9.5M10 20v-5h4v5"/>',
+    exit: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M9.5 8l-4 4 4 4M5.5 12H16"/>',
+    cutlery: '<path d="M7 3v18M4.5 3v5a2.5 2.5 0 0 0 5 0V3M17.5 21V3c-2.2 1.8-3 4.6-3 8.5h3"/>',
+    sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM18.5 16l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+    sofa: '<path d="M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M3 13a2 2 0 1 1 4 0v2h10v-2a2 2 0 1 1 4 0v5H3zM5 18v2M19 18v2"/>',
+    pot: '<path d="M4 10h16v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM2 10h2M20 10h2M9 3.5v3M12 3v3.5M15 3.5v3"/>',
+    bed: '<path d="M3 19V6M3 15h18M21 19v-6a3 3 0 0 0-3-3h-7v5"/><circle cx="7" cy="12" r="1.7"/>',
+    bath: '<path d="M3 12h18v2a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5zM6 12V6a2 2 0 0 1 3.6-1.2M7 19l-1 2M17 19l1 2"/>',
+    monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/>',
+    car: '<path d="M3 17v-4l2.4-5h13.2l2.4 5v4zM3 13h18M7 17v2M17 17v2"/>',
+    tree: '<path d="M12 21v-5M6 16h12L12 3z"/>'
   };
   function icon(name) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (I[name] || I.sensor) + '</svg>'; }
 
@@ -289,7 +303,7 @@
       '<div>' + (x.big ? '<div class="t-big">' + x.big + '</div>' : '') +
       '<div class="t-name">' + esc(d.name) + '</div>' +
       '<div class="t-state">' + esc(d.available ? x.state : 'Unavailable') + '</div>' +
-      '<div class="t-room">' + esc(state.zones[d.zone] ? state.zones[d.zone].name : '') + '</div></div>' +
+      (showRoomLabel ? '<div class="t-room">' + esc(zoneName(d.zone)) + '</div>' : '') + '</div>' +
       (x.bar != null ? '<span class="t-bar" style="width:' + Math.round(x.bar * 100) + '%"></span>' : '') +
       '</button>';
   }
@@ -311,29 +325,198 @@
     return out;
   }
 
-  function shownDevices() {
-    return Object.keys(state.devices).map(function (k) { return state.devices[k]; }).filter(isShown);
+  function allDevices() { return Object.keys(state.devices).map(function (k) { return state.devices[k]; }); }
+  function shownDevices() { return allDevices().filter(isShown); }
+  function kindRank(d) { return { switch: 0, dimmer: 0, thermostat: 1, cover: 2, lock: 3, sensor: 4 }[kind(d)]; }
+  function zoneName(zid) { return state.zones[zid] ? state.zones[zid].name : 'Other'; }
+  function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
+  function joinNames(a) {
+    if (a.length <= 1) return a.join('');
+    return a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  }
+  function avg(list) { return list.reduce(function (s, v) { return s + v; }, 0) / list.length; }
+
+  // ---- what needs attention
+  function lightsOn(zid) {
+    return allDevices().filter(function (d) { return d.class === 'light' && val(d, 'onoff') === true && (!zid || d.zone === zid); });
+  }
+  function alerts() {
+    var out = [];
+    allDevices().forEach(function (d) {
+      ['alarm_water', 'alarm_smoke', 'alarm_co'].forEach(function (a) {
+        if (val(d, a) === true) out.push({ d: d, level: 3, text: d.name + ' (' + zoneName(d.zone) + ') reports ' + { alarm_water: 'water', alarm_smoke: 'smoke', alarm_co: 'carbon monoxide' }[a] });
+      });
+    });
+    shownDevices().forEach(function (d) {
+      if (val(d, 'alarm_contact') === true) out.push({ d: d, level: 2, text: d.name + ' in ' + zoneName(d.zone) + ' is open' });
+      if (val(d, 'locked') === false) out.push({ d: d, level: 2, text: d.name + ' is unlocked' });
+    });
+    return out.sort(function (a, b) { return b.level - a.level; });
+  }
+  function powerInfo() {
+    var all = allDevices().filter(function (d) { return typeof val(d, 'measure_power') === 'number'; });
+    if (!all.length) return null;
+    var meters = all.filter(function (d) { return d.cumulative; });   // a main meter measures the whole home
+    var w = (meters.length ? meters : all).reduce(function (s, d) { return s + val(d, 'measure_power'); }, 0);
+    return Math.abs(w) >= 1000 ? fmtNum(w / 1000, 1) + ' kW' : fmtNum(w, 0) + ' W';
+  }
+  function roomTemp(zid) {
+    var pick = function (list) { return list.filter(function (d) { return d.zone === zid && typeof val(d, 'measure_temperature') === 'number'; }); };
+    var l = pick(shownDevices());
+    if (!l.length) l = pick(allDevices());
+    return l.length ? avg(l.map(function (d) { return val(d, 'measure_temperature'); })) : null;
+  }
+  function insideTemp() {
+    var l = shownDevices().filter(function (d) { return typeof val(d, 'measure_temperature') === 'number'; });
+    return l.length ? avg(l.map(function (d) { return val(d, 'measure_temperature'); })) : null;
   }
 
-  function allDevices() { return Object.keys(state.devices).map(function (k) { return state.devices[k]; }); }
+  // ---- header details (weather, inside, power)
+  function weatherIcon(s) {
+    s = String(s || '').toLowerCase();
+    if (/snow|sleet/.test(s)) return 'snow';
+    if (/rain|drizzle|shower|thunder/.test(s)) return 'rain';
+    if (/cloud|overcast|fog|mist/.test(s)) return 'cloud';
+    return isNight() ? 'moon' : 'sun';
+  }
+  function renderMeta() {
+    var el = $('meta'), w = state.weather, h = '';
+    if (!backend) { el.innerHTML = ''; return; }
+    if (cfg.showWeather && w && typeof w.temperature === 'number') {
+      var st = w.state ? String(w.state).replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }) : '';
+      h += '<div class="m-weather">' + icon(weatherIcon(w.state)) + '<span class="m-temp">' + fmtNum(w.temperature) + '°</span><span class="m-state">' + esc(st) + '</span></div>';
+    }
+    var parts = [], t = insideTemp(), p = powerInfo();
+    if (t != null) parts.push('Inside ' + fmtNum(t) + '°');
+    if (p) parts.push(p);
+    if (parts.length) h += '<div class="m-sub">' + esc(parts.join('  ·  ')) + '</div>';
+    el.innerHTML = h;
+  }
+  function renderWeather() { renderMeta(); }
 
-  // One big grid of tiles; the room is a small label on each tile.
+  // ---- the status sentence
+  function greeting() {
+    var h = new Date().getHours();
+    return h >= 5 && h < 10 ? 'Good morning' : h < 17 && h >= 10 ? 'Good afternoon' : h >= 17 && h < 22 ? 'Good evening' : 'Good night';
+  }
+  function renderStatus() {
+    var el = $('status');
+    if (!backend) {
+      el.innerHTML = '<div class="s-greet">Welcome</div><div class="s-line">Hold the gear icon in the corner for a second to connect your Homey.</div>';
+      return;
+    }
+    var on = lightsOn(), h = '<div class="s-greet">' + greeting() + '</div>';
+    if (!on.length) {
+      h += '<div class="s-line">All lights are off.</div>';
+    } else {
+      var rooms = [];
+      on.forEach(function (d) { var n = zoneName(d.zone); if (rooms.indexOf(n) < 0) rooms.push(n); });
+      var named = rooms.length > 3 ? rooms.slice(0, 2).concat([(rooms.length - 2) + ' other rooms']) : rooms;
+      h += '<div class="s-line">' + on.length + ' light' + (on.length > 1 ? 's are' : ' is') + ' on in ' + esc(joinNames(named)) + '.' +
+        ' <button class="s-action" data-act="alloff">Turn off</button></div>';
+    }
+    var al = alerts();
+    if (al.length) {
+      al.slice(0, 3).forEach(function (a) {
+        h += '<button class="s-alert" data-dev="' + esc(a.d.id) + '">' + icon(a.level > 2 ? 'smoke' : 'doorOpen') + '<span>' + esc(a.text) + '.</span>' + icon('chev') + '</button>';
+      });
+      if (al.length > 3) h += '<div class="s-more">and ' + (al.length - 3) + ' more</div>';
+    } else if (shownDevices().some(function (d) { return has(d, 'alarm_contact') || has(d, 'locked'); })) {
+      h += '<div class="s-calm">Doors and windows are closed.</div>';
+    }
+    el.innerHTML = h;
+  }
+
+  // ---- scene buttons, with the one that fits the time of day highlighted
+  var SCENE_RULES = [
+    { re: /night|natt|sleep|sove|bed|legg/i, icon: 'moon', period: 'night' },
+    { re: /morning|morgen|wake|våkn|frokost|breakfast/i, icon: 'sun', period: 'morning' },
+    { re: /leav|away|borte|går ut|reis|work|jobb/i, icon: 'exit', period: 'day' },
+    { re: /home|hjem|arriv|kommer/i, icon: 'home', period: 'evening' },
+    { re: /movie|film|kino|tv|cinema/i, icon: 'tv', period: 'evening' },
+    { re: /dinner|middag|lunch|lunsj|mat|eat/i, icon: 'cutlery', period: 'evening' }
+  ];
+  function sceneRule(name) { for (var i = 0; i < SCENE_RULES.length; i++) if (SCENE_RULES[i].re.test(name)) return SCENE_RULES[i]; return null; }
+  function period() {
+    var h = new Date().getHours();
+    return h >= 5 && h < 10 ? 'morning' : h < 17 && h >= 10 ? 'day' : h >= 17 && h < 22 ? 'evening' : 'night';
+  }
+  function renderScenes() {
+    var p = period(), suggested = -1;
+    (cfg.scenes || []).forEach(function (f, i) { var r = sceneRule(f.name); if (suggested < 0 && r && r.period === p) suggested = i; });
+    $('scenes').innerHTML = (cfg.scenes || []).map(function (f, i) {
+      var r = sceneRule(f.name);
+      return '<button class="scene' + (i === suggested ? ' suggested' : '') + '" data-scene="' + i + '"><span class="sc-icon">' +
+        icon(r ? r.icon : 'sparkle') + '</span><span class="sc-name">' + esc(f.name) + '</span></button>';
+    }).join('');
+  }
+
+  // ---- room bar
+  var ROOM_RULES = [
+    [/living|stue|lounge|family/i, 'sofa'], [/kitchen|kjøkken|kjokken/i, 'pot'], [/bed|sov|master|guest|gjeste|kid|barn|nursery/i, 'bed'],
+    [/bath|bad|wc|toilet|toalett|laundry|vask/i, 'bath'], [/office|kontor|study|arbeid|work/i, 'monitor'],
+    [/hall|gang|entr|corridor|stair|trapp|vindfang/i, 'door'], [/garage|garasje|carport/i, 'car'],
+    [/garden|hage|outside|ute|terrass|balcon|balkong|patio|yard/i, 'tree']
+  ];
+  function roomIcon(name) { for (var i = 0; i < ROOM_RULES.length; i++) if (ROOM_RULES[i][0].test(name)) return ROOM_RULES[i][1]; return 'home'; }
+  function roomZones() {
+    var used = {};
+    shownDevices().forEach(function (d) { used[d.zone] = true; });
+    return zoneOrder().filter(function (z) { return used[z]; }).concat(used._none ? ['_none'] : []);
+  }
+  function renderRoomBar() {
+    var el = $('roombar');
+    if (!backend) { el.innerHTML = ''; return; }
+    var alertZones = {};
+    alerts().forEach(function (a) { alertZones[a.d.zone] = true; });
+    var h = roomZones().map(function (zid) {
+      var n = zoneName(zid), t = roomTemp(zid), lit = lightsOn(zid).length > 0;
+      return '<button class="room-pill' + (lit ? ' lit' : '') + (alertZones[zid] ? ' alert' : '') + '" data-room="' + esc(zid) + '">' +
+        icon(roomIcon(n)) + '<span class="rp-name">' + esc(n) + '</span>' + (t != null ? '<span class="rp-temp">' + fmtNum(t) + '°</span>' : '') + '</button>';
+    }).join('');
+    el.innerHTML = h + '<button class="room-pill all" data-room="_all" aria-label="All devices">' + icon('grid') + '<span class="rp-name">All</span></button>';
+    // Fade the right edge only when the pills overflow and can be scrolled.
+    el.classList.toggle('fits', el.scrollWidth <= el.clientWidth + 1);
+  }
+
+  function renderChips() { renderStatus(); renderRoomBar(); renderMeta(); if (openRoomId) renderRoomHead(); }
+
+  // ---- room panel (slides up with the room's device tiles)
+  var openRoomId = null, showRoomLabel = false;
+  function openRoom(zid) {
+    openRoomId = zid;
+    renderRoomHead(); renderRooms();
+    $('roomBackdrop').hidden = false;
+    $('rooms').scrollTop = 0;
+  }
+  function closeRoom() { openRoomId = null; $('roomBackdrop').hidden = true; $('rooms').innerHTML = ''; }
+  function roomDevices() {
+    return shownDevices().filter(function (d) { return openRoomId === '_all' || d.zone === openRoomId; });
+  }
+  function renderRoomHead() {
+    var zid = openRoomId, isAll = zid === '_all', name = isAll ? 'All devices' : zoneName(zid);
+    var on = isAll ? lightsOn() : lightsOn(zid), t = isAll ? null : roomTemp(zid);
+    var meta = [];
+    if (t != null) meta.push(fmtNum(t) + '°');
+    meta.push(on.length ? on.length + ' light' + (on.length > 1 ? 's' : '') + ' on' : 'Lights off');
+    $('roomHead').innerHTML = '<span class="rh-icon">' + icon(isAll ? 'grid' : roomIcon(name)) + '</span><div class="rh-text"><div class="rh-name">' + esc(name) +
+      '</div><div class="rh-meta">' + esc(meta.join('  ·  ')) + '</div></div>' +
+      (on.length ? '<button class="btn" data-act="roomoff">' + icon('bulb') + 'Turn off</button>' : '') +
+      '<button class="icon-btn rh-close" data-act="closeroom" aria-label="Close">' + icon('x') + '</button>';
+  }
   function renderRooms() {
     var rooms = $('rooms');
+    if (!openRoomId) { rooms.innerHTML = ''; return; }
+    showRoomLabel = openRoomId === '_all';
     var zIndex = {};
     zoneOrder().forEach(function (z, i) { zIndex[z] = i; });
-    var list = shownDevices().sort(function (a, b) {
+    var list = roomDevices().sort(function (a, b) {
       var byRoom = (zIndex[a.zone] || 0) - (zIndex[b.zone] || 0), byKind = kindRank(a) - kindRank(b);
       return (cfg.sortBy === 'room' ? (byRoom || byKind) : (byKind || byRoom)) || a.name.localeCompare(b.name);
     });
-    if (!list.length) {
-      rooms.innerHTML = '<div class="empty"><strong>' + (backend ? 'No devices selected' : 'Not connected yet') + '</strong>' +
-        (backend ? 'Hold the gear icon (top right) to choose devices.' : 'Hold the gear icon (top right) for 1 second to connect your Homey, or try demo mode.') + '</div>';
-      return;
-    }
-    rooms.innerHTML = '<div class="grid">' + list.map(tileHTML).join('') + '</div>';
+    rooms.innerHTML = list.length ? '<div class="grid">' + list.map(tileHTML).join('') + '</div>'
+      : '<div class="empty">No devices here. Hold the gear icon to choose devices.</div>';
   }
-  function kindRank(d) { return { switch: 0, dimmer: 0, thermostat: 1, cover: 2, lock: 3, sensor: 4 }[kind(d)]; }
 
   function updateTile(id) {
     var d = state.devices[id];
@@ -345,89 +528,16 @@
     }
     if (sheetId === id && !dragging && !sheetTouch) renderSheet();
   }
-  function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
-
-  function renderScenes() {
-    var el = $('scenes');
-    el.innerHTML = (cfg.scenes || []).map(function (f, i) {
-      return '<button class="scene" data-scene="' + i + '">' + icon('play') + esc(f.name) + '</button>';
-    }).join('');
-  }
-
-  function renderChips() {
-    var list = shownDevices(), html = '';
-    var open = list.filter(function (d) { return val(d, 'alarm_contact') === true; });
-    var unlocked = list.filter(function (d) { return val(d, 'locked') === false; });
-    var alarms = list.filter(function (d) { return val(d, 'alarm_water') || val(d, 'alarm_smoke') || val(d, 'alarm_co'); });
-    if (alarms.length) html += '<span class="chip alert">' + icon('smoke') + alarms.length + ' alarm' + (alarms.length > 1 ? 's' : '') + '</span>';
-    if (open.length) html += '<span class="chip alert">' + icon('doorOpen') + open.length + ' open</span>';
-    if (unlocked.length) html += '<span class="chip alert">' + icon('unlock') + unlocked.length + ' unlocked</span>';
-    $('chips').innerHTML = backend ? html : '';
-    renderHero();
-  }
-
-  // ---------------------------------------------------------------- overview cards
-  function lightsOn() { return allDevices().filter(function (d) { return d.class === 'light' && val(d, 'onoff') === true; }); }
-  function powerInfo() {
-    var all = allDevices().filter(function (d) { return typeof val(d, 'measure_power') === 'number'; });
-    if (!all.length) return null;
-    var meters = all.filter(function (d) { return d.cumulative; });   // a main meter measures the whole home
-    var src = meters.length ? meters : all;
-    var w = src.reduce(function (s, d) { return s + val(d, 'measure_power'); }, 0);
-    return { w: w, sub: meters.length ? 'Whole home' : all.length + ' device' + (all.length > 1 ? 's' : '') + ' measured' };
-  }
-  function indoorInfo() {
-    var pool = shownDevices().filter(function (d) { return typeof val(d, 'measure_temperature') === 'number'; });
-    if (!pool.length) pool = allDevices().filter(function (d) { return typeof val(d, 'measure_temperature') === 'number'; });
-    if (!pool.length) return null;
-    var t = pool.map(function (d) { return val(d, 'measure_temperature'); });
-    return { avg: t.reduce(function (a, b) { return a + b; }, 0) / t.length, min: Math.min.apply(null, t), max: Math.max.apply(null, t), n: t.length };
-  }
-  function hcard(cls, label, value, unitTxt, sub, ic, tag) {
-    tag = tag || 'div';
-    return '<' + tag + ' class="hcard ' + cls + '"' + (tag === 'button' ? ' id="allOff"' : '') + '><span class="h-icon">' + icon(ic) + '</span>' +
-      '<div class="h-label">' + esc(label) + '</div><div class="h-val">' + value + (unitTxt ? '<small>' + esc(unitTxt) + '</small>' : '') + '</div>' +
-      '<div class="h-sub">' + esc(sub) + '</div></' + tag + '>';
-  }
-  function renderHero() {
-    var el = $('hero');
-    if (!backend) { el.innerHTML = ''; return; }
-    var h = '', w = state.weather;
-    if (cfg.showWeather && w && typeof w.temperature === 'number') {
-      h += hcard('h-out', 'Outside', fmtNum(w.temperature), '°', w.state ? String(w.state).replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }) : 'Now', weatherIcon(w.state));
-    }
-    var ind = indoorInfo();
-    if (ind) h += hcard('h-in', 'Inside', fmtNum(ind.avg), '°', ind.n > 1 ? fmtNum(ind.min) + '° – ' + fmtNum(ind.max) + '°' : 'Average', 'thermo');
-    var p = powerInfo();
-    if (p) {
-      var kw = Math.abs(p.w) >= 1000;
-      h += hcard('h-power', 'Power', kw ? fmtNum(p.w / 1000, 2) : fmtNum(p.w, 0), kw ? ' kW' : ' W', p.sub, 'bolt');
-    }
-    var on = lightsOn();
-    h += hcard('h-lights' + (on.length ? ' lit' : ''), 'Lights', on.length ? on.length : 'All', on.length ? ' on' : ' off',
-      on.length ? 'Tap to turn all off' : 'Everything is dark', 'bulb', 'button');
-    el.innerHTML = h;
-    el.style.setProperty('--cards', (h.match(/class="hcard/g) || []).length);
-  }
 
   function renderPresence() {
     var el = $('presence');
     if (!cfg.showPresence || !state.users.length) { el.innerHTML = ''; return; }
     el.innerHTML = state.users.map(function (u) {
-      return '<span class="avatar' + (u.present ? ' home' : '') + (u.asleep ? ' asleep' : '') + '" title="' + esc(u.name) + (u.present ? ' — home' : ' — away') + '">' + esc(initials(u.name)) + '</span>';
+      return '<span class="avatar' + (u.present ? ' home' : '') + (u.asleep ? ' asleep' : '') + '" title="' + esc(u.name) + (u.present ? ', home' : ', away') + '">' + esc(initials(u.name)) + '</span>';
     }).join('');
   }
 
-  function weatherIcon(s) {
-    s = String(s || '').toLowerCase();
-    if (/snow|sleet/.test(s)) return 'snow';
-    if (/rain|drizzle|shower|thunder/.test(s)) return 'rain';
-    if (/cloud|overcast|fog|mist/.test(s)) return 'cloud';
-    return isNight() ? 'moon' : 'sun';
-  }
-  function renderWeather() { renderHero(); }
-
-  function renderAll() { renderChips(); renderPresence(); renderScenes(); renderRooms(); }
+  function renderAll() { renderPresence(); renderScenes(); renderChips(); renderRooms(); }
 
   // ---------------------------------------------------------------- clock
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -442,6 +552,8 @@
     var ds = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
     $('date').textContent = ds;
     $('saverTime').textContent = timeStr(now);
+    // Greeting and suggested scene follow the time of day.
+    if (now.getSeconds() === 0 && backend) { renderStatus(); renderScenes(); }
     $('saverSub').textContent = ds + (state.weather && typeof state.weather.temperature === 'number' && cfg.showWeather ? ' · ' + fmtNum(state.weather.temperature) + '°' : '');
     $('saver').classList.toggle('night', isNight());
     // Kiosk hygiene: reload once a day at 04:00 to keep memory and sockets fresh.
@@ -461,6 +573,10 @@
     requestWakeLock();
   }
   setInterval(function () {
+    var idle = Date.now() - lastActivity;
+    // Drift back to the calm home screen when nobody is touching the panel.
+    if (idle > 60000 && openRoomId && $('sheetBackdrop').hidden && $('confirmBackdrop').hidden) closeRoom();
+    if (idle > 60000 && !$('sheetBackdrop').hidden && $('confirmBackdrop').hidden) closeSheet();
     var idleLimit = isNight() ? Math.min(cfg.idleMin || 1, 1) : cfg.idleMin;
     if (!idleLimit || !$('settings').hidden || !$('sheetBackdrop').hidden) return;
     if (Date.now() - lastActivity > idleLimit * 60000) $('saver').hidden = false;
@@ -543,13 +659,30 @@
       .then(function () { setTimeout(function () { b.classList.remove('fired'); }, 1200); });
   });
 
-  $('hero').addEventListener('click', function (e) {
-    if (!e.target.closest('#allOff')) return;
-    var on = lightsOn();
-    if (!on.length) return toast('All lights are already off');
-    confirmBox('Turn off ' + on.length + ' light' + (on.length > 1 ? 's' : '') + '?', 'Turn off').then(function (ok) {
+  function lightsOffFlow(on, where) {
+    if (!on.length) return toast('The lights are already off');
+    confirmBox('Turn off ' + on.length + ' light' + (on.length > 1 ? 's' : '') + where + '?', 'Turn off').then(function (ok) {
       if (ok) on.forEach(function (d) { setCap(d.id, 'onoff', false); });
     });
+  }
+
+  $('status').addEventListener('click', function (e) {
+    if (e.target.closest('[data-act="alloff"]')) return lightsOffFlow(lightsOn(), '');
+    var a = e.target.closest('[data-dev]');
+    if (a && state.devices[a.getAttribute('data-dev')]) openSheet(a.getAttribute('data-dev'));
+  });
+
+  $('roombar').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-room]');
+    if (b) openRoom(b.getAttribute('data-room'));
+  });
+
+  $('roomBackdrop').addEventListener('click', function (e) {
+    if (e.target === $('roomBackdrop') || e.target.closest('[data-act="closeroom"]')) return closeRoom();
+    if (e.target.closest('[data-act="roomoff"]')) {
+      var all = openRoomId === '_all';
+      lightsOffFlow(all ? lightsOn() : lightsOn(openRoomId), all ? '' : ' in ' + zoneName(openRoomId));
+    }
   });
 
   // ---------------------------------------------------------------- detail sheet
