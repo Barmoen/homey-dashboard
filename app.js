@@ -19,7 +19,10 @@
     use24h: true,
     sortBy: 'type',       // tile order: 'type' (lights first) or 'room'
     topInset: null,       // px of space for the iPad status bar, null = automatic
-    weatherLoc: null      // {name, lat, lon}; null = use Homey's location
+    weatherLoc: null,     // {name, lat, lon}; null = use Homey's location
+    todoistToken: '',     // personal API token from Todoist, stored only on this device
+    todoLists: [],        // Todoist project ids to show, in order
+    todoToday: true       // also show today's and overdue tasks
   };
   var LOCALE = 'nb-NO';
 
@@ -152,7 +155,12 @@
     bath: '<path d="M3 12h18v2a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5zM6 12V6a2 2 0 0 1 3.6-1.2M7 19l-1 2M17 19l1 2"/>',
     monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/>',
     car: '<path d="M3 17v-4l2.4-5h13.2l2.4 5v4zM3 13h18M7 17v2M17 17v2"/>',
-    tree: '<path d="M12 21v-5M6 16h12L12 3z"/>'
+    tree: '<path d="M12 21v-5M6 16h12L12 3z"/>',
+    cart: '<path d="M3 4h2.2l2.3 11h10.3l2.2-8.2H6.3"/><circle cx="9.5" cy="19.5" r="1.4"/><circle cx="16.5" cy="19.5" r="1.4"/>',
+    tools: '<path d="M14.5 6.5l3 3M4 20l8.5-8.5M11 5.5 14 2.5l7.5 7.5-3 3z"/>',
+    list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+    today: '<circle cx="12" cy="12" r="9"/><path d="M8 12.2l2.8 2.8L16.5 9"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>'
   };
   function icon(name) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + (I[name] || I.sensor) + '</svg>'; }
 
@@ -488,6 +496,101 @@
     return first ? kindOf(first) + ' fra kl. ' + first.time.getHours() : 'Opphold de neste 12 timene';
   }
 
+  // ---------------------------------------------------------------- Todoist (shopping list, home projects, today)
+  var TD = 'https://api.todoist.com/api/v1';
+  var todo = { projects: [], lists: {}, today: [], error: '', loaded: false };
+  var demoTodo = null;
+  function todoActive() { return !!cfg.todoistToken || (cfg.demo && !!backend); }
+  // Demo mode without a token shows two sample lists without touching the saved choice.
+  function todoListIds() { return !cfg.todoistToken && cfg.demo ? (cfg.todoLists.length ? cfg.todoLists : ['p1', 'p2']) : cfg.todoLists; }
+  function tdFetch(path, opts) {
+    opts = opts || {};
+    var headers = { Authorization: 'Bearer ' + cfg.todoistToken };
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    return fetch(TD + path, { method: opts.method || 'GET', headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined })
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) throw new Error('Todoist avviste tokenet');
+        if (!r.ok) throw new Error('Todoist svarte ' + r.status);
+        return r.status === 204 ? null : r.json().catch(function () { return null; });
+      });
+  }
+  // Follows Todoist's cursor pagination and returns every result.
+  function tdAll(path) {
+    var out = [];
+    function page(cursor) {
+      var sep = path.indexOf('?') < 0 ? '?' : '&';
+      return tdFetch(path + sep + 'limit=200' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '')).then(function (j) {
+        out = out.concat((j && j.results) || []);
+        return j && j.next_cursor && out.length < 2000 ? page(j.next_cursor) : out;
+      });
+    }
+    return page(null);
+  }
+  function makeDemoTodo() {
+    var t = function (id, content, extra) { return Object.assign({ id: id, content: content, section_id: null, parent_id: null, due: null, child_order: +id.slice(1) }, extra || {}); };
+    var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    return {
+      projects: [{ id: 'p1', name: 'Handleliste', is_shared: true }, { id: 'p2', name: 'Hjemmeprosjekter', is_shared: true }, { id: 'p3', name: 'Jobb', is_shared: false }],
+      lists: {
+        p1: { sections: [{ id: 's1', name: 'Frukt og grønt' }, { id: 's2', name: 'Meieri' }], tasks: [
+          t('t1', 'Bananer', { section_id: 's1' }), t('t2', 'Agurk', { section_id: 's1' }), t('t3', 'Melk', { section_id: 's2' }),
+          t('t4', 'Smør', { section_id: 's2' }), t('t5', 'Kaffe'), t('t6', 'Dopapir')] },
+        p2: { sections: [], tasks: [
+          t('t7', 'Male gangen', { due: { date: tomorrow.toISOString().slice(0, 10) } }), t('t8', 'Bytte pakning på kjøkkenkranen'),
+          t('t9', 'Rydde bod'), t('t10', 'Kjøpe maling', { parent_id: 't7' })] }
+      },
+      today: [t('t11', 'Betale strømregningen', { due: { date: new Date().toISOString().slice(0, 10) } }), t('t12', 'Ringe rørlegger', { due: { date: new Date().toISOString().slice(0, 10) } })]
+    };
+  }
+  function loadTodo() {
+    if (!todoActive()) { todo = { projects: [], lists: {}, today: [], error: '', loaded: false }; renderStrip(); return Promise.resolve(); }
+    if (!cfg.todoistToken) {   // demo mode without a token
+      demoTodo = demoTodo || makeDemoTodo();
+      todo = { projects: demoTodo.projects, lists: demoTodo.lists, today: demoTodo.today, error: '', loaded: true };
+      renderStrip(); if (listOpen()) renderRooms();
+      return Promise.resolve();
+    }
+    var ids = todoListIds();
+    return Promise.all([
+      tdAll('/projects'),
+      Promise.all(ids.map(function (id) {
+        return Promise.all([tdAll('/tasks?project_id=' + encodeURIComponent(id)), tdAll('/sections?project_id=' + encodeURIComponent(id)).catch(function () { return []; })])
+          .then(function (r) { return { id: id, tasks: r[0], sections: r[1] }; })
+          .catch(function () { return null; });   // a deleted or unshared project shouldn't hide the others
+      })),
+      cfg.todoToday ? tdAll('/tasks/filter?query=' + encodeURIComponent('today | overdue')) : Promise.resolve([])
+    ]).then(function (r) {
+      var lists = {};
+      r[1].forEach(function (l) { if (l) lists[l.id] = { tasks: l.tasks, sections: l.sections }; });
+      todo = { projects: r[0], lists: lists, today: r[2], error: '', loaded: true };
+    }).catch(function (err) {
+      todo.error = err && err.message || String(err);
+    }).then(function () { renderStrip(); if (listOpen()) { renderRoomHead(); renderRooms(); } });
+  }
+  function projectName(id) { var p = todo.projects.filter(function (x) { return x.id === id; })[0]; return p ? p.name : 'Liste'; }
+  function listIcon(name) { return /handle|shopping|innkjøp|dagligvare|matbutikk|grocer/i.test(name) ? 'cart' : /prosjekt|project|oppussing|hus|hjem|fiks|repar|vedlikehold/i.test(name) ? 'tools' : 'list'; }
+  function topLevel(tasks) { return tasks.filter(function (t) { return !t.parent_id && !t.checked; }); }
+  function closeTask(task) {
+    if (!cfg.todoistToken) return Promise.resolve();   // demo
+    return tdFetch('/tasks/' + encodeURIComponent(task.id) + '/close', { method: 'POST' });
+  }
+  function addTask(projectId, content) {
+    if (!cfg.todoistToken) {
+      var t = { id: 'n' + Date.now(), content: content, section_id: null, parent_id: null, due: null, child_order: 0 };
+      demoTodo.lists[projectId].tasks.unshift(t);
+      return Promise.resolve(t);
+    }
+    return tdFetch('/tasks', { method: 'POST', body: { content: content, project_id: projectId } });
+  }
+  function dueText(t) {
+    if (!t.due || !t.due.date) return '';
+    var d = new Date(t.due.datetime || (t.due.date.length === 10 ? t.due.date + 'T12:00:00' : t.due.date));
+    if (isNaN(d)) return '';
+    var days = daysFromToday(d);
+    if (days < 0) return 'forfalt';
+    return dayWord(days, d) + (t.due.datetime ? ' kl. ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) : '');
+  }
+
   // ---------------------------------------------------------------- render
   function zoneOrder() {
     // Depth-first order so rooms appear as they're arranged in Homey.
@@ -617,25 +720,52 @@
     });
     if (al.length > 3) h += '<div class="s-more">og ' + (al.length - 3) + ' til</div>';
 
-    // Calm extras: vacuums at work, upcoming waste pickups.
+    // Calm extra: vacuums at work.
     var extras = '';
     allDevices().filter(function (d) { return isVacuum(d) && vacuumBusy(d); }).forEach(function (d) {
       extras += '<button class="s-info" data-dev="' + esc(d.id) + '">' + icon('vacuum') + '<span>' + esc(d.name) + ' støvsuger nå</span></button>';
     });
-    var pk = allPickups();
-    if (pk.length) {
-      var soon = pk.filter(function (p) { return p.days != null && p.days <= 1; });
-      extras += '<div class="s-waste' + (soon.length ? ' soon' : '') + '">' + icon('trash') + '<div>' +
-        (soon.length ? '<div class="sw-head">' + esc(cap1(joinNames(soon.map(function (p) { return p.label.toLowerCase(); })))) + ' hentes ' + soon[0].when +
-          (soon[0].days === 1 ? ' – husk å sette ut dunken' : '') + '</div>' : '') +
-        '<div class="sw-list">' + pk.filter(function (p) { return soon.indexOf(p) < 0; }).slice(0, 3).map(function (p) {
-          return '<span>' + esc(cap1(p.label)) + ' <b>' + esc(p.when) + '</b></span>';
-        }).join('') + '</div></div></div>';
-    }
     if (!al.length && !extras && shownDevices().some(function (d) { return has(d, 'alarm_contact') || has(d, 'locked'); })) {
       h += '<div class="s-calm">Dører og vinduer er lukket.</div>';
     }
     el.innerHTML = h + extras;
+  }
+
+  // ---- card row under the centre: waste pickups and Todoist lists
+  function stripCard(attrs, cls, ic, title, sub, count) {
+    return '<button class="i-card ' + cls + '" ' + attrs + '><span class="ic-icon">' + icon(ic) + '</span><span class="ic-text"><span class="ic-title">' + esc(title) +
+      '</span><span class="ic-sub">' + esc(sub) + '</span></span>' + (count != null ? '<span class="ic-count">' + count + '</span>' : '') + '</button>';
+  }
+  function preview(tasks) {
+    var names = tasks.map(function (t) { return t.content; });
+    return names.length ? names.slice(0, 3).join(', ') + (names.length > 3 ? ' …' : '') : 'Tom';
+  }
+  function renderStrip() {
+    var el = $('strip');
+    if (!backend) { el.innerHTML = ''; return; }
+    var h = '';
+    var pk = allPickups();
+    if (pk.length) {
+      var soon = pk.filter(function (p) { return p.days != null && p.days <= 1; });
+      var rest = pk.filter(function (p) { return soon.indexOf(p) < 0; });
+      var title = soon.length ? cap1(joinNames(soon.map(function (p) { return p.label.toLowerCase(); }))) + ' ' + soon[0].when : cap1(pk[0].label) + ' ' + pk[0].when;
+      var sub = soon.length ? (soon[0].days === 1 ? 'Sett ut dunken i kveld' : 'Hentes i dag') : rest.slice(1, 3).map(function (p) { return cap1(p.label) + ' ' + p.when; }).join(' · ') || 'Neste tømming';
+      h += stripCard('data-dev="' + esc(pk[0].d.id) + '"', soon.length ? 'warm' : '', 'trash', title, sub);
+    }
+    if (todoActive()) {
+      if (todo.error) h += stripCard('data-list="_settings"', 'err', 'list', 'Todoist', todo.error);
+      todoListIds().forEach(function (id) {
+        var l = todo.lists[id];
+        if (!l) return;
+        var open = topLevel(l.tasks);
+        h += stripCard('data-list="' + esc(id) + '"', '', listIcon(projectName(id)), projectName(id), preview(open), open.length);
+      });
+      if (cfg.todoToday && todo.loaded) {
+        var td = topLevel(todo.today);
+        h += stripCard('data-list="_today"', td.length ? '' : 'quiet', 'today', 'I dag', td.length ? preview(td) : 'Ingen oppgaver', td.length || null);
+      }
+    }
+    el.innerHTML = h;
   }
 
   // ---- scene buttons, with the one that fits the time of day highlighted
@@ -691,7 +821,7 @@
     el.classList.toggle('fits', el.scrollWidth <= el.clientWidth + 1);
   }
 
-  function renderChips() { renderStatus(); renderRoomBar(); renderMeta(); if (openRoomId) renderRoomHead(); }
+  function renderChips() { renderStatus(); renderRoomBar(); renderMeta(); renderStrip(); if (openRoomId && !listOpen()) renderRoomHead(); }
 
   // ---- room panel (slides up with the room's device tiles)
   var openRoomId = null, showRoomLabel = false;
@@ -706,7 +836,64 @@
     return (openRoomId === '_all' ? allDevices().filter(function (d) { return isShown(d) || isWaste(d) || isVacuum(d); }) : shownDevices())
       .filter(function (d) { return openRoomId === '_all' || d.zone === openRoomId; });
   }
+  // ---- Todoist lists use the same slide-up panel ("list:<projectId>" or "list:_today")
+  function listOpen() { return !!openRoomId && openRoomId.indexOf('list:') === 0; }
+  function openList(id) { openRoom('list:' + id); loadTodo(); }
+  var pendingDone = {};   // task id -> timer; a second tap within 2 s undoes the tick
+  function listTasks(id) {
+    if (id === '_today') return todo.today.slice();
+    var l = todo.lists[id];
+    return l ? l.tasks.slice() : [];
+  }
+  function renderListHead(id) {
+    var name = id === '_today' ? 'I dag' : projectName(id), open = topLevel(listTasks(id));
+    $('roomHead').innerHTML = '<span class="rh-icon">' + icon(id === '_today' ? 'today' : listIcon(name)) + '</span><div class="rh-text"><div class="rh-name">' + esc(name) +
+      '</div><div class="rh-meta">' + (open.length ? open.length + ' igjen' : 'Alt er gjort') + '  ·  Todoist</div></div>' +
+      '<button class="icon-btn rh-close" data-act="closeroom" aria-label="Lukk">' + icon('x') + '</button>';
+  }
+  function taskRow(t, sub) {
+    var due = dueText(t), done = !!pendingDone[t.id];
+    return '<button class="task' + (sub ? ' sub' : '') + (done ? ' done' : '') + '" data-task="' + esc(t.id) + '"><span class="tk-box">' + (done ? icon('today') : '') + '</span>' +
+      '<span class="tk-text">' + esc(t.content) + '</span>' + (due ? '<span class="tk-due' + (due === 'forfalt' ? ' late' : '') + '">' + esc(due) + '</span>' : '') + '</button>';
+  }
+  function renderList(id) {
+    var tasks = listTasks(id).filter(function (t) { return !t.checked; }).sort(function (a, b) { return (a.child_order || 0) - (b.child_order || 0); });
+    var h = id === '_today' ? '' : '<form class="add-task" data-addto="' + esc(id) + '"><input type="text" id="addTask" placeholder="Legg til …" autocomplete="off" enterkeyhint="done">' +
+      '<button class="btn" type="submit">' + icon('plus') + 'Legg til</button></form>';
+    var kids = {};
+    tasks.forEach(function (t) { if (t.parent_id) (kids[t.parent_id] = kids[t.parent_id] || []).push(t); });
+    var rows = function (list) {
+      return list.map(function (t) { return taskRow(t, false) + (kids[t.id] || []).map(function (k) { return taskRow(k, true); }).join(''); }).join('');
+    };
+    var top = tasks.filter(function (t) { return !t.parent_id || !tasks.some(function (p) { return p.id === t.parent_id; }); });
+    var sections = id === '_today' || !todo.lists[id] ? [] : todo.lists[id].sections || [];
+    var loose = top.filter(function (t) { return !t.section_id || !sections.some(function (s) { return s.id === t.section_id; }); });
+    h += '<div class="tasks">' + rows(loose);
+    sections.forEach(function (s) {
+      var inS = top.filter(function (t) { return t.section_id === s.id; });
+      if (inS.length) h += '<div class="tk-section">' + esc(s.name) + '</div>' + rows(inS);
+    });
+    if (!tasks.length) h += '<div class="empty">' + (todo.loaded ? 'Ingenting her akkurat nå.' : 'Henter fra Todoist …') + '</div>';
+    $('rooms').innerHTML = h + '</div>';
+  }
+  function toggleTask(id) {
+    var listId = openRoomId.slice(5), t = listTasks(listId).filter(function (x) { return x.id === id; })[0];
+    if (!t) return;
+    if (pendingDone[id]) { clearTimeout(pendingDone[id]); delete pendingDone[id]; renderList(listId); return; }
+    pendingDone[id] = setTimeout(function () {
+      delete pendingDone[id];
+      closeTask(t).then(function () {
+        [todo.today].concat(Object.keys(todo.lists).map(function (k) { return todo.lists[k].tasks; })).forEach(function (arr) {
+          for (var i = arr.length - 1; i >= 0; i--) if (arr[i].id === id || arr[i].parent_id === id) arr.splice(i, 1);
+        });
+        renderStrip(); if (listOpen()) { renderListHead(openRoomId.slice(5)); renderList(openRoomId.slice(5)); }
+      }).catch(function (err) { toast('Kunne ikke fullføre «' + t.content + '»: ' + (err && err.message || err), true); if (listOpen()) renderList(listId); });
+    }, 2000);
+    renderList(listId);
+  }
+
   function renderRoomHead() {
+    if (listOpen()) return renderListHead(openRoomId.slice(5));
     var zid = openRoomId, isAll = zid === '_all', name = isAll ? 'Alle enheter' : zoneName(zid);
     var on = isAll ? lightsOn() : lightsOn(zid), t = isAll ? null : roomTemp(zid);
     var meta = [];
@@ -720,6 +907,13 @@
   function renderRooms() {
     var rooms = $('rooms');
     if (!openRoomId) { rooms.innerHTML = ''; return; }
+    if (listOpen()) {
+      // Keep what's being typed in the add field when the list refreshes underneath.
+      var inp = $('addTask'), typed = inp ? inp.value : '', focused = inp && document.activeElement === inp;
+      renderList(openRoomId.slice(5));
+      if (typed || focused) { $('addTask').value = typed; if (focused) $('addTask').focus(); }
+      return;
+    }
     showRoomLabel = openRoomId === '_all';
     var zIndex = {};
     zoneOrder().forEach(function (z, i) { zIndex[z] = i; });
@@ -750,7 +944,7 @@
     }).join('');
   }
 
-  function renderAll() { renderPresence(); renderScenes(); renderChips(); renderWeather(); renderRooms(); }
+  function renderAll() { renderPresence(); renderScenes(); renderChips(); renderWeather(); renderStrip(); renderRooms(); }
 
   // ---------------------------------------------------------------- clock
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -895,8 +1089,32 @@
     if (b) openRoom(b.getAttribute('data-room'));
   });
 
+  $('strip').addEventListener('click', function (e) {
+    var dv = e.target.closest('[data-dev]');
+    if (dv && state.devices[dv.getAttribute('data-dev')]) return openSheet(dv.getAttribute('data-dev'));
+    var l = e.target.closest('[data-list]');
+    if (!l) return;
+    if (l.getAttribute('data-list') === '_settings') return openSettings();
+    openList(l.getAttribute('data-list'));
+  });
+
+  $('roomBackdrop').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = e.target.closest('[data-addto]'), inp = $('addTask'), text = inp ? inp.value.trim() : '';
+    if (!f || !text) return;
+    var pid = f.getAttribute('data-addto');
+    inp.value = '';
+    addTask(pid, text).then(function (t) {
+      if (t && todo.lists[pid] && cfg.todoistToken) todo.lists[pid].tasks.unshift(t);
+      toast('«' + text + '» er lagt til');
+      renderStrip(); if (listOpen()) { renderListHead(pid); renderRooms(); }
+    }).catch(function (err) { toast('Kunne ikke legge til: ' + (err && err.message || err), true); });
+  });
+
   $('roomBackdrop').addEventListener('click', function (e) {
     if (e.target === $('roomBackdrop') || e.target.closest('[data-act="closeroom"]')) return closeRoom();
+    var tk = e.target.closest('[data-task]');
+    if (tk) return toggleTask(tk.getAttribute('data-task'));
     if (e.target.closest('[data-act="roomoff"]')) {
       var all = openRoomId === '_all';
       lightsOffFlow(all ? lightsOn() : lightsOn(openRoomId), all ? '' : ' i ' + zoneName(openRoomId));
@@ -1043,9 +1261,9 @@
     btn.addEventListener('pointercancel', stop);
   })();
 
-  var settingsMsg = null, placeResults = [], placeMsg = '', debugId = '';
+  var settingsMsg = null, placeResults = [], placeMsg = '', debugId = '', todoMsg = null;
   function openSettings() { $('settings').hidden = false; renderSettings(); }
-  function closeSettings() { $('settings').hidden = true; settingsMsg = null; placeResults = []; placeMsg = ''; renderAll(); loadForecast(); }
+  function closeSettings() { $('settings').hidden = true; settingsMsg = null; placeResults = []; placeMsg = ''; todoMsg = null; renderAll(); loadForecast(); loadTodo(); }
 
   function renderSettings() {
     var s = '', connected = !!backend;
@@ -1067,6 +1285,21 @@
       (placeMsg ? '<div class="hint">' + esc(placeMsg) + '</div>' : '') +
       placeResults.map(function (p, i) { return '<button class="check place" data-place="' + i + '">' + esc(p.label) + '</button>'; }).join('') +
       '<div class="hint">Værmeldingen kommer fra Meteorologisk institutt (MET Nordic) via Open-Meteo.</div></div></div>';
+
+    // Todoist
+    s += '<h3>Todoist</h3><div class="card"><div class="field"><label for="sTodoist">API-token</label>' +
+      '<div class="inline"><input type="password" id="sTodoist" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Lim inn Todoist-tokenet" value="' + esc(cfg.todoistToken) + '">' +
+      '<button class="btn" data-s="todo-connect">Koble til Todoist</button></div>' +
+      '<div class="hint">Finnes i Todoist under Innstillinger → Integrasjoner → Utvikler. Tokenet gir tilgang til hele Todoist-kontoen din og lagres bare på denne iPaden.</div></div>' +
+      (todoMsg ? '<div class="status-msg ' + todoMsg.type + '">' + esc(todoMsg.text) + '</div>' : '');
+    if (todo.projects.length) {
+      s += '<div class="field"><label>Lister som vises på dashbordet</label></div>' + todo.projects.map(function (p) {
+        return '<label class="check"><input type="checkbox" data-todo="' + esc(p.id) + '"' + (cfg.todoLists.indexOf(p.id) >= 0 ? ' checked' : '') + '>' + esc(p.name) +
+          '<span class="cmeta">' + (p.is_shared ? 'Delt' : '') + '</span></label>';
+      }).join('') +
+        '<label class="check"><input type="checkbox" id="sTodoToday"' + (cfg.todoToday ? ' checked' : '') + '>Vis oppgaver for i dag og forfalte oppgaver</label>';
+    }
+    s += '</div>';
 
     if (connected) {
       // Scenes
@@ -1152,7 +1385,7 @@
   }
 
   function exportable() {
-    var c = Object.assign({}, cfg); delete c.token; return c;
+    var c = Object.assign({}, cfg); delete c.token; delete c.todoistToken; return c;
   }
 
   function readDisplayFields() {
@@ -1182,9 +1415,16 @@
       cfg.scenes = (cfg.scenes || []).filter(function (x) { return x.id !== fid; });
       if (t.checked && f) cfg.scenes.push(f);
       saveConfig();
+    } else if (t.hasAttribute('data-todo')) {
+      var pid = t.getAttribute('data-todo');
+      cfg.todoLists = cfg.todoLists.filter(function (x) { return x !== pid; });
+      if (t.checked) cfg.todoLists.push(pid);
+      saveConfig();
+    } else if (t.id === 'sTodoToday') {
+      cfg.todoToday = t.checked; saveConfig();
     } else if (t.id === 'sDebug') {
       debugId = t.value; renderSettings();
-    } else if (t.id && t.id.indexOf('s') === 0 && ['sAddr', 'sToken', 'sBackup', 'sPlace'].indexOf(t.id) < 0) {
+    } else if (t.id && t.id.indexOf('s') === 0 && ['sAddr', 'sToken', 'sBackup', 'sPlace', 'sTodoist'].indexOf(t.id) < 0) {
       readDisplayFields(); saveConfig(); tick();
     }
   });
@@ -1202,6 +1442,16 @@
     var a = b.getAttribute('data-s');
     if (a === 'done') { readDisplayFields(); saveConfig(); closeSettings(); }
     if (a === 'place-search') searchPlace();
+    if (a === 'todo-connect') {
+      cfg.todoistToken = $('sTodoist').value.trim(); saveConfig();
+      if (!cfg.todoistToken) { todoMsg = null; todo = { projects: [], lists: {}, today: [], error: '', loaded: false }; renderSettings(); return; }
+      todoMsg = { type: 'ok', text: 'Kobler til Todoist …' }; renderSettings();
+      loadTodo().then(function () {
+        todoMsg = todo.error ? { type: 'err', text: todo.error + '. Sjekk at hele tokenet er kopiert.' }
+          : { type: 'ok', text: 'Tilkoblet – fant ' + todo.projects.length + ' prosjekter. Kryss av for listene du vil se.' };
+        renderSettings();
+      });
+    }
     if (a === 'place-homey') { cfg.weatherLoc = null; saveConfig(); renderSettings(); loadForecast(); }
     if (a === 'connect') {
       cfg.address = $('sAddr').value.trim();
@@ -1223,7 +1473,7 @@
           cfg.scenes = state.flows.slice(); saveConfig();
           settingsMsg = { type: 'ok', html: 'Demomodus er på, med eksempelenheter. Trykk Ferdig for å se deg rundt.' }; renderSettings();
         });
-      } else { backend = null; state.devices = {}; state.flows = []; state.users = []; state.weather = null; state.forecast = null; cfg.scenes = []; cfg.shown = null; saveConfig(); settingsMsg = null; renderSettings(); }
+      } else { backend = null; state.devices = {}; state.flows = []; state.users = []; state.weather = null; state.forecast = null; cfg.scenes = []; cfg.shown = null; demoTodo = null; saveConfig(); settingsMsg = null; loadTodo(); renderSettings(); }
     }
     if (a === 'all' || a === 'none' || a === 'auto') {
       cfg.shown = a === 'auto' ? null : a === 'all' ? Object.keys(state.devices) : [];
@@ -1232,8 +1482,8 @@
     if (a === 'import') {
       try {
         var obj = JSON.parse($('sBackup').value);
-        var token = cfg.token;
-        cfg = Object.assign({}, DEFAULTS, obj, { token: token });
+        var token = cfg.token, tdt = cfg.todoistToken;
+        cfg = Object.assign({}, DEFAULTS, obj, { token: token, todoistToken: tdt });
         saveConfig(); settingsMsg = { type: 'ok', html: 'Innstillingene er gjenopprettet.' }; renderSettings();
       } catch (err) { settingsMsg = { type: 'err', html: 'Teksten er ikke gyldige innstillinger.' }; renderSettings(); }
     }
@@ -1263,6 +1513,7 @@
     backend.users().then(function (u) { state.users = u; renderPresence(); }).catch(function () { state.users = []; renderPresence(); });
     backend.weather().then(function (w) { state.weather = w; renderWeather(); }).catch(function () { state.weather = null; renderWeather(); });
     loadForecast();
+    loadTodo();
   }
 
   function applyFresh(devs) {
@@ -1318,6 +1569,7 @@
   // Safety net: refresh values every 2 minutes and when the iPad wakes, in case a socket event was missed.
   setInterval(function () {
     if (backend && backend.refresh && !document.hidden) backend.refresh().then(applyFresh).catch(function () { setConn('bad'); });
+    if (backend && !document.hidden && todoActive()) loadTodo();
   }, 120000);
   setInterval(function () { if (backend) loadExtras(); }, 15 * 60000);
   document.addEventListener('visibilitychange', function () {

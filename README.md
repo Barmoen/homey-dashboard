@@ -9,8 +9,9 @@ The interface is in Norwegian (bokmål).
 A calm home screen you can read from across the room, in landscape or portrait:
 - A large clock and date, with inside temperature, power use and who is home in the corner
 - A status sentence: which lights are on (with a *Slå av* button), plus anything that needs attention, such as an open window, an unlocked door, or water or smoke. Tap an alert to see that device.
-- Robot vacuums that are running ("Roborock S8 støvsuger nå"), and the next **waste pickups** from the Renovasjon / Min Renovasjon apps, with a reminder the day before
+- Robot vacuums that are running ("Roborock S8 støvsuger nå")
 - A **weather card**: now, feels-like, wind, today's low and high, when rain or snow starts or stops, and the next 8 hours. The forecast is MET Nordic from the Norwegian Meteorological Institute, fetched via [Open-Meteo](https://open-meteo.com) for Homey's location, or a place you pick in settings.
+- A row of cards under the centre: the next **waste pickup** (with a reminder the day before), your **Todoist** lists (for example a shared shopping list and home projects) and today's tasks. Tap a list to open it: tick items off (tap again within 2 seconds to undo) or type to add new ones.
 - Round scene buttons for your Homey flows. The one that fits the time of day is highlighted (it recognises names like *morgen*, *går ut*, *middag*, *film* and *natt*).
 - A row of rooms at the bottom. Rooms with lights on glow, and rooms with an alert get a red edge. Tap a room, or the grid icon for everything, to slide up its devices: tap a tile to toggle it, **hold** it for brightness, thermostat, blinds, vacuum and sensor details.
 - Open panels close by themselves after a minute without touches, so the panel always falls back to the calm view.
@@ -65,6 +66,14 @@ Other free static hosts (Netlify, Cloudflare Pages) work the same way.
    - Turn off **Settings → General → Software Update → Automatic Updates** if you don't want it restarting on its own.
 
 **Tip, battery health:** an iPad charging 24/7 can wear out or swell its battery. Plug the charger into a **Homey-controlled smart plug** and make a flow that turns it on for ~3 hours, twice a day.
+
+## Todoist (optional)
+
+1. In Todoist: **Settings → Integrations → Developer → API token**, and copy it.
+2. On the iPad: hold the gear → **Todoist** → paste the token → **Koble til Todoist**.
+3. Tick the projects to show (shared projects are marked *Delt*), and whether to show today's tasks.
+
+The token gives full access to your Todoist account, so it is stored only on the iPad, like the Homey key, and is left out of the settings backup. Calendar events that Todoist shows from Google or Outlook are not available through Todoist's API, so they can't appear here.
 
 ## Try it first: demo mode
 

@@ -37,7 +37,7 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 
 /* ---------- Header ---------- */
 .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex: none; }
-.clock .time { font-size: 112px; font-weight: 200; letter-spacing: -5px; line-height: .95; font-variant-numeric: tabular-nums; }
+.clock .time { font-size: 100px; font-weight: 200; letter-spacing: -5px; line-height: .95; font-variant-numeric: tabular-nums; }
 .clock .date { color: var(--muted); font-size: 19px; margin-top: 10px; padding-left: 4px; }
 .top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 14px; padding-top: 6px; }
 .top-actions { display: flex; align-items: center; gap: 10px; }
@@ -97,6 +97,39 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .wx-hint { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 16px; line-height: 1.45; margin-top: 12px; }
 .wx-hint:first-child { margin-top: 0; }
 .wx-hint svg { width: 32px; height: 32px; flex: none; }
+
+/* ---------- Card row: waste pickups and Todoist lists ---------- */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; flex: none; }
+.strip:empty { display: none; }
+.i-card { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 16px 12px 12px; border-radius: 18px; background: var(--panel); border: 1px solid var(--line); text-align: left; transition: transform .12s, background .2s; }
+.i-card:active { transform: scale(.98); background: var(--tile-press); }
+.ic-icon { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.06); color: var(--muted); flex: none; }
+.ic-icon svg { width: 22px; height: 22px; }
+.ic-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ic-title { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ic-sub { font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.ic-count { min-width: 30px; height: 30px; padding: 0 8px; border-radius: 15px; display: grid; place-items: center; background: rgba(255,255,255,.08); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.i-card.warm { border-color: var(--on-line); background: linear-gradient(150deg, #3d3020 0%, #241e15 100%); }
+.i-card.warm .ic-icon { color: var(--on); background: rgba(245,185,66,.16); }
+.i-card.warm .ic-title { color: var(--on); }
+.i-card.err .ic-icon { color: var(--alert); }
+.i-card.quiet .ic-title { color: var(--muted); }
+
+/* ---------- Todoist list inside the slide-up panel ---------- */
+.add-task { display: flex; gap: 10px; margin-bottom: 14px; }
+.add-task input { flex: 1; min-width: 0; font: inherit; font-size: 18px; color: var(--text); background: var(--tile); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; -webkit-appearance: none; appearance: none; -webkit-user-select: text; user-select: text; }
+.add-task .btn svg { width: 18px; height: 18px; }
+.tasks { display: flex; flex-direction: column; }
+.task { display: flex; align-items: center; gap: 14px; padding: 14px 6px; border-bottom: 1px solid var(--line); text-align: left; font-size: 19px; }
+.task.sub { padding-left: 46px; font-size: 17px; }
+.tk-box { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--faint); flex: none; display: grid; place-items: center; color: var(--ok); transition: border-color .2s; }
+.tk-box svg { width: 30px; height: 30px; stroke-width: 2; }
+.tk-text { flex: 1; min-width: 0; }
+.tk-due { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.tk-due.late { color: var(--alert); }
+.task.done .tk-box { border-color: transparent; }
+.task.done .tk-text { color: var(--faint); text-decoration: line-through; }
+.tk-section { font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 22px 6px 6px; }
 
 /* ---------- Scenes ---------- */
 .scenes { display: flex; gap: 22px; overflow-x: auto; flex: none; padding: 4px 4px 2px; scrollbar-width: none; }
@@ -268,6 +301,7 @@ input[type=range].temp::-webkit-slider-thumb { box-shadow: -800px 0 0 794px var(
 /* ---------- Portrait / small ---------- */
 @media (max-width: 860px) {
   .clock .time { font-size: 84px; letter-spacing: -3px; }
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .center { grid-template-columns: minmax(0, 1fr); align-content: center; gap: 30px; }
   .s-line { font-size: 30px; }
   .roombar { flex-wrap: wrap; -webkit-mask-image: none; mask-image: none; }
