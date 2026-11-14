@@ -21,12 +21,14 @@
       ['d13', 'Climate', 'bedroom', 'sensor', { measure_temperature: cap(18.9, { units: '°C' }), measure_humidity: cap(46, { units: '%' }) }],
       ['d14', 'Desk lamp', 'office', 'light', { onoff: cap(true), dim: cap(0.85) }],
       ['d15', 'Window', 'office', 'sensor', { alarm_contact: cap(true) }],
-      ['d16', 'Floor heating', 'bath', 'thermostat', { measure_temperature: cap(23.1, { units: '°C' }), target_temperature: cap(24, { units: '°C', min: 5, max: 35, step: 0.5 }), onoff: cap(true) }]
+      ['d16', 'Floor heating', 'bath', 'thermostat', { measure_temperature: cap(23.1, { units: '°C' }), target_temperature: cap(24, { units: '°C', min: 5, max: 35, step: 0.5 }), onoff: cap(true) }],
+      ['d17', 'Main meter', 'home', 'sensor', { measure_power: cap(1840, { units: 'W' }) }]
     ];
     var out = {};
     list.forEach(function (r) {
       out[r[0]] = { id: r[0], name: r[1], zone: r[2], class: r[3], available: true, capabilities: Object.keys(r[4]), capabilitiesObj: r[4] };
     });
+    out.d17.energyObj = { cumulative: true };   // behaves like a P1 / HAN whole-home meter
     return out;
   }
 
@@ -52,6 +54,7 @@
       }
       var tv = self._devices.d3.capabilitiesObj;
       self._emit('d3', 'measure_power', tv.onoff.value ? Math.round(80 + Math.random() * 15) : 0);
+      self._emit('d17', 'measure_power', Math.round(1500 + Math.random() * 700));
     }, 8000);
     return Promise.resolve();
   };

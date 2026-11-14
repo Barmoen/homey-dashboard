@@ -3,10 +3,12 @@
 A touch dashboard made for an iPad on the wall. It talks **directly to your Homey Pro on your home network**, so no extra server is needed. Changes show up live: when a light turns on anywhere, its tile updates right away.
 
 **What it shows**
-- Clock, date, outdoor weather and who is home
+- Clock, date and who is home
+- Overview cards: outside temperature, average inside temperature, live power use (your main meter if you have a P1/HAN reader, otherwise the devices that measure power) and lights on (tap to turn them all off)
 - Scene buttons that start your Homey flows
-- Rooms with tiles: tap to toggle lights and sockets, **hold** a tile for brightness, thermostat, blinds and sensor details
-- Status chips: lights on (tap to turn them all off), doors and windows open, unlocked locks, water or smoke alarms
+- One grid of device tiles, with the room shown on each: tap to toggle lights and sockets, **hold** a tile for brightness, thermostat, blinds and sensor details. Order them by type or by room in settings.
+- Alert chips: doors and windows open, unlocked locks, water or smoke alarms
+- Leaves room for the iPad status bar (adjustable in settings → Display)
 - A screensaver clock after a few minutes idle, which goes very dark during night hours
 - Reloads itself every night at 04:00, so it keeps running for weeks
 
@@ -97,3 +99,5 @@ npx esbuild entry.js --bundle --minify --platform=browser --target=safari15 --de
   --alias:form-data=./stub-formdata.js --alias:node-fetch=./stub-fetch.js --legal-comments=eof \
   --outfile=vendor/homey-api.min.js
 ```
+
+**Publishing changes:** bump the `?v=` number on the `styles.css`, `demo.js` and `app.js` links in `index.html` whenever you change those files, so the iPad fetches the new versions instead of cached ones.

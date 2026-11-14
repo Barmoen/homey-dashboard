@@ -16,8 +16,17 @@
     showWeather: true,
     showPresence: true,
     lockConfirm: true,
-    use24h: true
+    use24h: true,
+    sortBy: 'type',       // tile order: 'type' (lights first) or 'room'
+    topInset: null       // px of space for the iPad status bar, null = automatic
   };
+
+  // A Home Screen web app can't hide the iPad status bar, so leave room for it.
+  var STANDALONE = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+  function applyTopInset() {
+    var px = typeof cfg.topInset === 'number' ? cfg.topInset : (STANDALONE ? 30 : 0);
+    document.documentElement.style.setProperty('--top-inset', px + 'px');
+  }
 
   function loadConfig() {
     try {
@@ -186,7 +195,8 @@
       var c = d.capabilitiesObj[k] || {};
       co[k] = { value: c.value, units: c.units, min: c.min, max: c.max, step: c.step, title: c.title, decimals: c.decimals, setable: c.setable };
     });
-    return { id: d.id, name: d.name, zone: d.zone, class: d.virtualClass || d.class, capabilities: d.capabilities || Object.keys(co), capabilitiesObj: co, available: d.available !== false };
+    return { id: d.id, name: d.name, zone: d.zone, class: d.virtualClass || d.class, capabilities: d.capabilities || Object.keys(co), capabilitiesObj: co, available: d.available !== false,
+      cumulative: !!(d.energyObj && d.energyObj.cumulative) };  // true for whole-home meters (P1 / HAN readers)
   }
   function has(d, c) { return d.capabilitiesObj && d.capabilitiesObj[c] !== undefined; }
   function val(d, c) { return has(d, c) ? d.capabilitiesObj[c].value : undefined; }
@@ -278,7 +288,8 @@
       '<div class="t-top"><span class="t-icon">' + icon(deviceIcon(d)) + '</span><span class="t-value">' + esc(x.corner) + '</span></div>' +
       '<div>' + (x.big ? '<div class="t-big">' + x.big + '</div>' : '') +
       '<div class="t-name">' + esc(d.name) + '</div>' +
-      '<div class="t-state">' + esc(d.available ? x.state : 'Unavailable') + '</div></div>' +
+      '<div class="t-state">' + esc(d.available ? x.state : 'Unavailable') + '</div>' +
+      '<div class="t-room">' + esc(state.zones[d.zone] ? state.zones[d.zone].name : '') + '</div></div>' +
       (x.bar != null ? '<span class="t-bar" style="width:' + Math.round(x.bar * 100) + '%"></span>' : '') +
       '</button>';
   }
@@ -304,33 +315,25 @@
     return Object.keys(state.devices).map(function (k) { return state.devices[k]; }).filter(isShown);
   }
 
+  function allDevices() { return Object.keys(state.devices).map(function (k) { return state.devices[k]; }); }
+
+  // One big grid of tiles; the room is a small label on each tile.
   function renderRooms() {
-    var rooms = $('rooms'), byZone = {};
-    shownDevices().forEach(function (d) { (byZone[d.zone] = byZone[d.zone] || []).push(d); });
-    var html = '';
-    zoneOrder().concat(['_none']).forEach(function (zid) {
-      var list = byZone[zid];
-      if (!list || !list.length) return;
-      if (cfg.shown) list.sort(function (a, b) { return cfg.shown.indexOf(a.id) - cfg.shown.indexOf(b.id); });
-      else list.sort(function (a, b) { return kindRank(a) - kindRank(b) || a.name.localeCompare(b.name); });
-      var z = state.zones[zid];
-      html += '<section class="room" data-zone="' + esc(zid) + '"><div class="room-head"><span class="room-name">' +
-        esc(z ? z.name : 'Other') + '</span><span class="room-meta">' + roomMeta(list) + '</span></div><div class="tiles">' +
-        list.map(tileHTML).join('') + '</div></section>';
+    var rooms = $('rooms');
+    var zIndex = {};
+    zoneOrder().forEach(function (z, i) { zIndex[z] = i; });
+    var list = shownDevices().sort(function (a, b) {
+      var byRoom = (zIndex[a.zone] || 0) - (zIndex[b.zone] || 0), byKind = kindRank(a) - kindRank(b);
+      return (cfg.sortBy === 'room' ? (byRoom || byKind) : (byKind || byRoom)) || a.name.localeCompare(b.name);
     });
-    if (!html) {
-      html = '<div class="empty"><strong>' + (backend ? 'No devices selected' : 'Not connected yet') + '</strong>' +
+    if (!list.length) {
+      rooms.innerHTML = '<div class="empty"><strong>' + (backend ? 'No devices selected' : 'Not connected yet') + '</strong>' +
         (backend ? 'Hold the gear icon (top right) to choose devices.' : 'Hold the gear icon (top right) for 1 second to connect your Homey, or try demo mode.') + '</div>';
+      return;
     }
-    rooms.innerHTML = '<div class="rooms-cols">' + html + '</div>';
+    rooms.innerHTML = '<div class="grid">' + list.map(tileHTML).join('') + '</div>';
   }
   function kindRank(d) { return { switch: 0, dimmer: 0, thermostat: 1, cover: 2, lock: 3, sensor: 4 }[kind(d)]; }
-  function roomMeta(list) {
-    var temps = list.filter(function (d) { return typeof val(d, 'measure_temperature') === 'number'; });
-    if (!temps.length) return '';
-    var t = temps.reduce(function (s, d) { return s + val(d, 'measure_temperature'); }, 0) / temps.length;
-    return fmtNum(t) + '°';
-  }
 
   function updateTile(id) {
     var d = state.devices[id];
@@ -339,11 +342,6 @@
       var tmp = document.createElement('div');
       tmp.innerHTML = tileHTML(d);
       el.replaceWith(tmp.firstChild);
-      var room = document.querySelector('.room[data-zone="' + cssEsc(d.zone) + '"] .room-meta');
-      if (room) {
-        var list = shownDevices().filter(function (x) { return x.zone === d.zone; });
-        room.textContent = roomMeta(list);
-      }
     }
     if (sheetId === id && !dragging && !sheetTouch) renderSheet();
   }
@@ -358,16 +356,58 @@
 
   function renderChips() {
     var list = shownDevices(), html = '';
-    var lightsOn = list.filter(function (d) { return d.class === 'light' && val(d, 'onoff') === true; });
     var open = list.filter(function (d) { return val(d, 'alarm_contact') === true; });
     var unlocked = list.filter(function (d) { return val(d, 'locked') === false; });
     var alarms = list.filter(function (d) { return val(d, 'alarm_water') || val(d, 'alarm_smoke') || val(d, 'alarm_co'); });
     if (alarms.length) html += '<span class="chip alert">' + icon('smoke') + alarms.length + ' alarm' + (alarms.length > 1 ? 's' : '') + '</span>';
     if (open.length) html += '<span class="chip alert">' + icon('doorOpen') + open.length + ' open</span>';
     if (unlocked.length) html += '<span class="chip alert">' + icon('unlock') + unlocked.length + ' unlocked</span>';
-    html += '<button class="chip' + (lightsOn.length ? ' warm' : '') + '" id="allOff">' + icon('bulb') +
-      (lightsOn.length ? lightsOn.length + ' on' : 'All off') + '</button>';
     $('chips').innerHTML = backend ? html : '';
+    renderHero();
+  }
+
+  // ---------------------------------------------------------------- overview cards
+  function lightsOn() { return allDevices().filter(function (d) { return d.class === 'light' && val(d, 'onoff') === true; }); }
+  function powerInfo() {
+    var all = allDevices().filter(function (d) { return typeof val(d, 'measure_power') === 'number'; });
+    if (!all.length) return null;
+    var meters = all.filter(function (d) { return d.cumulative; });   // a main meter measures the whole home
+    var src = meters.length ? meters : all;
+    var w = src.reduce(function (s, d) { return s + val(d, 'measure_power'); }, 0);
+    return { w: w, sub: meters.length ? 'Whole home' : all.length + ' device' + (all.length > 1 ? 's' : '') + ' measured' };
+  }
+  function indoorInfo() {
+    var pool = shownDevices().filter(function (d) { return typeof val(d, 'measure_temperature') === 'number'; });
+    if (!pool.length) pool = allDevices().filter(function (d) { return typeof val(d, 'measure_temperature') === 'number'; });
+    if (!pool.length) return null;
+    var t = pool.map(function (d) { return val(d, 'measure_temperature'); });
+    return { avg: t.reduce(function (a, b) { return a + b; }, 0) / t.length, min: Math.min.apply(null, t), max: Math.max.apply(null, t), n: t.length };
+  }
+  function hcard(cls, label, value, unitTxt, sub, ic, tag) {
+    tag = tag || 'div';
+    return '<' + tag + ' class="hcard ' + cls + '"' + (tag === 'button' ? ' id="allOff"' : '') + '><span class="h-icon">' + icon(ic) + '</span>' +
+      '<div class="h-label">' + esc(label) + '</div><div class="h-val">' + value + (unitTxt ? '<small>' + esc(unitTxt) + '</small>' : '') + '</div>' +
+      '<div class="h-sub">' + esc(sub) + '</div></' + tag + '>';
+  }
+  function renderHero() {
+    var el = $('hero');
+    if (!backend) { el.innerHTML = ''; return; }
+    var h = '', w = state.weather;
+    if (cfg.showWeather && w && typeof w.temperature === 'number') {
+      h += hcard('h-out', 'Outside', fmtNum(w.temperature), '°', w.state ? String(w.state).replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }) : 'Now', weatherIcon(w.state));
+    }
+    var ind = indoorInfo();
+    if (ind) h += hcard('h-in', 'Inside', fmtNum(ind.avg), '°', ind.n > 1 ? fmtNum(ind.min) + '° – ' + fmtNum(ind.max) + '°' : 'Average', 'thermo');
+    var p = powerInfo();
+    if (p) {
+      var kw = Math.abs(p.w) >= 1000;
+      h += hcard('h-power', 'Power', kw ? fmtNum(p.w / 1000, 2) : fmtNum(p.w, 0), kw ? ' kW' : ' W', p.sub, 'bolt');
+    }
+    var on = lightsOn();
+    h += hcard('h-lights' + (on.length ? ' lit' : ''), 'Lights', on.length ? on.length : 'All', on.length ? ' on' : ' off',
+      on.length ? 'Tap to turn all off' : 'Everything is dark', 'bulb', 'button');
+    el.innerHTML = h;
+    el.style.setProperty('--cards', (h.match(/class="hcard/g) || []).length);
   }
 
   function renderPresence() {
@@ -385,15 +425,9 @@
     if (/cloud|overcast|fog|mist/.test(s)) return 'cloud';
     return isNight() ? 'moon' : 'sun';
   }
-  function renderWeather() {
-    var w = state.weather, el = $('weather');
-    if (!cfg.showWeather || !w || typeof w.temperature !== 'number') { el.hidden = true; return; }
-    el.hidden = false;
-    var sub = w.state ? String(w.state).replace(/_/g, ' ') : 'Outside';
-    el.innerHTML = icon(weatherIcon(w.state)) + '<div><div class="w-temp">' + fmtNum(w.temperature) + '°</div><div class="w-sub">' + esc(sub) + '</div></div>';
-  }
+  function renderWeather() { renderHero(); }
 
-  function renderAll() { renderChips(); renderPresence(); renderWeather(); renderScenes(); renderRooms(); }
+  function renderAll() { renderChips(); renderPresence(); renderScenes(); renderRooms(); }
 
   // ---------------------------------------------------------------- clock
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -509,9 +543,9 @@
       .then(function () { setTimeout(function () { b.classList.remove('fired'); }, 1200); });
   });
 
-  $('chips').addEventListener('click', function (e) {
+  $('hero').addEventListener('click', function (e) {
     if (!e.target.closest('#allOff')) return;
-    var on = shownDevices().filter(function (d) { return d.class === 'light' && val(d, 'onoff') === true; });
+    var on = lightsOn();
     if (!on.length) return toast('All lights are already off');
     confirmBox('Turn off ' + on.length + ' light' + (on.length > 1 ? 's' : '') + '?', 'Turn off').then(function (ok) {
       if (ok) on.forEach(function (d) { setCap(d.id, 'onoff', false); });
@@ -689,12 +723,17 @@
     }
 
     s += '<h3>Display</h3><div class="card">' +
+      '<div class="field"><label for="sSort">Order tiles by</label><select id="sSort">' +
+      '<option value="type"' + (cfg.sortBy !== 'room' ? ' selected' : '') + '>Type: lights first, then climate, blinds, locks, sensors</option>' +
+      '<option value="room"' + (cfg.sortBy === 'room' ? ' selected' : '') + '>Room</option></select></div>' +
       '<div class="field"><label for="sIdle">Screensaver after (minutes idle, 0 = never)</label><input type="number" id="sIdle" min="0" max="120" value="' + esc(cfg.idleMin) + '"></div>' +
       '<div class="field"><label>Night hours (dark clock after 1 minute idle)</label><div class="inline"><input type="time" id="sNightFrom" value="' + esc(cfg.nightFrom) + '"><input type="time" id="sNightTo" value="' + esc(cfg.nightTo) + '"></div></div>' +
       '<label class="check"><input type="checkbox" id="sWeather"' + (cfg.showWeather ? ' checked' : '') + '>Show weather</label>' +
       '<label class="check"><input type="checkbox" id="sPresence"' + (cfg.showPresence ? ' checked' : '') + '>Show who is home</label>' +
       '<label class="check"><input type="checkbox" id="s24h"' + (cfg.use24h ? ' checked' : '') + '>24-hour clock</label>' +
       '<label class="check"><input type="checkbox" id="sLockConfirm"' + (cfg.lockConfirm ? ' checked' : '') + '>Ask before unlocking locks</label>' +
+      '<div class="field"><label for="sTopInset">Space at the top for the iPad status bar (pixels — leave empty for automatic, ' + (STANDALONE ? '30' : '0') + ')</label>' +
+      '<input type="number" id="sTopInset" min="0" max="120" placeholder="Automatic" value="' + (typeof cfg.topInset === 'number' ? cfg.topInset : '') + '"></div>' +
       '</div>';
 
     s += '<h3>Backup</h3><div class="card"><div class="field"><label for="sBackup">Settings without the API key — copy to keep, paste to restore</label>' +
@@ -717,6 +756,10 @@
     cfg.showPresence = $('sPresence').checked;
     cfg.use24h = $('s24h').checked;
     cfg.lockConfirm = $('sLockConfirm').checked;
+    cfg.sortBy = $('sSort').value === 'room' ? 'room' : 'type';
+    var ti = $('sTopInset').value.trim();
+    cfg.topInset = ti === '' ? null : Math.max(0, Math.min(120, +ti || 0));
+    applyTopInset();
   }
 
   $('settings').addEventListener('change', function (e) {
@@ -869,6 +912,7 @@
 
   ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, activity, { capture: true, passive: true }); });
 
+  applyTopInset();
   tick();
   setInterval(tick, 1000);
   renderAll();
