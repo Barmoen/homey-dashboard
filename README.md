@@ -1,14 +1,18 @@
-# Home Panel: a wall dashboard for Homey Pro
+# Hjemmepanel: a wall dashboard for Homey Pro
 
 A touch dashboard made for an iPad on the wall. It talks **directly to your Homey Pro on your home network**, so no extra server is needed. Changes show up live: when a light turns on anywhere, its tile updates right away.
 
+The interface is in Norwegian (bokmål).
+
 **What it shows**
 
-A calm home screen you can read from across the room:
-- A large clock and date, with weather, inside temperature, power use and who is home in the corner
-- One sentence about the house: which lights are on (with a *Turn off* button), plus anything that needs attention, such as an open window, an unlocked door, or water or smoke. Tap an alert to see that device.
-- Round scene buttons for your Homey flows. The one that fits the time of day is highlighted (it recognises names like *morning*, *leaving*, *dinner*, *movie* and *night*, in English or Norwegian).
-- A row of rooms at the bottom. Rooms with lights on glow, and rooms with an alert get a red edge. Tap a room, or the grid icon for everything, to slide up its devices: tap a tile to toggle it, **hold** it for brightness, thermostat, blinds and sensor details.
+A calm home screen you can read from across the room, in landscape or portrait:
+- A large clock and date, with inside temperature, power use and who is home in the corner
+- A status sentence: which lights are on (with a *Slå av* button), plus anything that needs attention, such as an open window, an unlocked door, or water or smoke. Tap an alert to see that device.
+- Robot vacuums that are running ("Roborock S8 støvsuger nå"), and the next **waste pickups** from the Renovasjon / Min Renovasjon apps, with a reminder the day before
+- A **weather card**: now, feels-like, wind, today's low and high, when rain or snow starts or stops, and the next 8 hours. The forecast is MET Nordic from the Norwegian Meteorological Institute, fetched via [Open-Meteo](https://open-meteo.com) for Homey's location, or a place you pick in settings.
+- Round scene buttons for your Homey flows. The one that fits the time of day is highlighted (it recognises names like *morgen*, *går ut*, *middag*, *film* and *natt*).
+- A row of rooms at the bottom. Rooms with lights on glow, and rooms with an alert get a red edge. Tap a room, or the grid icon for everything, to slide up its devices: tap a tile to toggle it, **hold** it for brightness, thermostat, blinds, vacuum and sensor details.
 - Open panels close by themselves after a minute without touches, so the panel always falls back to the calm view.
 - A screensaver clock after a few minutes idle, which goes very dark during night hours
 - Reloads itself every night at 04:00, so it keeps running for weeks
@@ -28,7 +32,7 @@ A calm home screen you can read from across the room:
    | Flows: view (`homey.flow.readonly`) | listing scenes |
    | Flows: start (`homey.flow.start`) | scene buttons |
    | Users: view (`homey.user.readonly`) | who is home (optional) |
-   | Geolocation: view (`homey.geolocation.readonly`) | weather (optional) |
+   | Geolocation: view (`homey.geolocation.readonly`) | weather for Homey's location (optional: you can pick a place in settings instead) |
 
 3. Copy the key. You'll paste it on the iPad later. **Don't put it in any file.**
 
@@ -73,7 +77,9 @@ Open the page, hold the gear, tap **Try demo mode**. You get sample rooms and de
 | "Could not reach Homey" | iPad and Homey must be on the same network. Check the IP. In Safari, open `https://<ip-with-dashes>.homey.homeylocal.com/api/manager/system/ping`: it should return a short reply. |
 | "Homey refused the API key" | The key was copied incompletely, or it is missing a permission from the table above. |
 | Red pulsing dot (top right) | The live connection dropped. It reconnects by itself, and values are re-checked every 2 minutes anyway. |
-| A device doesn't appear | Hold gear → tick it under *Devices on the dashboard*. |
+| A device doesn't appear | Hold gear → tick it under *Enheter på dashbordet*. |
+| A device shows the wrong thing | Hold gear → *Feilsøking* → pick the device and copy the raw data. That shows exactly what Homey reports for it. |
+| No weather | Give the API key the Geolocation permission, or hold gear → *Vær* → search for your town. |
 | A flow isn't in the scene list | The flow must start with the **"This flow is started"** trigger card (Advanced flows: the *Start* card). |
 | Changed the IP, or want to start over | Hold gear → change the IP and tap Connect, or use **Reset everything**. |
 

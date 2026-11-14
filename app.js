@@ -1,4 +1,4 @@
-/* Home Panel — a wall dashboard for Homey Pro, talking directly to Homey's local API. */
+/* Hjemmepanel — a wall dashboard for Homey Pro, talking directly to Homey's local API. UI text is Norwegian (bokmål). */
 (function () {
   'use strict';
 
@@ -18,8 +18,10 @@
     lockConfirm: true,
     use24h: true,
     sortBy: 'type',       // tile order: 'type' (lights first) or 'room'
-    topInset: null       // px of space for the iPad status bar, null = automatic
+    topInset: null,       // px of space for the iPad status bar, null = automatic
+    weatherLoc: null      // {name, lat, lon}; null = use Homey's location
   };
+  var LOCALE = 'nb-NO';
 
   // A Home Screen web app can't hide the iPad status bar, so leave room for it.
   var STANDALONE = navigator.standalone === true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
@@ -36,7 +38,7 @@
   }
   function saveConfig() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(cfg)); }
-    catch (e) { toast('Could not save settings on this device', true); }
+    catch (e) { toast('Kunne ikke lagre innstillingene på denne enheten', true); }
   }
   var cfg = loadConfig();
 
@@ -61,8 +63,9 @@
   }
   function fmtNum(v, digits) {
     if (typeof v !== 'number' || isNaN(v)) return '–';
-    return v.toLocaleString(undefined, { maximumFractionDigits: digits == null ? 1 : digits, minimumFractionDigits: 0 });
+    return v.toLocaleString(LOCALE, { maximumFractionDigits: digits == null ? 1 : digits, minimumFractionDigits: 0 });
   }
+  function cap1(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
   function initials(name) {
     return String(name || '?').split(/\s+/).map(function (p) { return p[0]; }).join('').slice(0, 2).toUpperCase();
   }
@@ -89,8 +92,18 @@
       $('confirmNo').onclick = function () { done(false); };
     });
   }
+  function startOfDay(d) { var x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+  function daysFromToday(date) { return Math.round((startOfDay(date) - startOfDay(new Date())) / 86400000); }
+  function dayWord(days, date) {
+    if (days === 0) return 'i dag';
+    if (days === 1) return 'i morgen';
+    if (days > 1 && days < 7 && date) return date.toLocaleDateString(LOCALE, { weekday: 'long' });
+    if (date) return date.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' }).replace('.', '');
+    return 'om ' + days + ' dager';
+  }
 
   // ---------------------------------------------------------------- icons
+  var CLOUD = 'M8.5 19h9a4 4 0 0 0 .4-8 5.5 5.5 0 0 0-10.6 1.6A3.3 3.3 0 0 0 8.5 19z';
   var I = {
     bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.8 10.6c.7.6 1.3 1.5 1.3 2.4h5c0-.9.6-1.8 1.3-2.4A6 6 0 0 0 12 3z"/>',
     plug: '<path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/>',
@@ -110,10 +123,19 @@
     smoke: '<path d="M3 8h18M5 8l1 9a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-9M9 4h6"/>',
     play: '<path d="M7 4.5v15l12-7.5z"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
     cloud: '<path d="M7 18h10.5a4.5 4.5 0 0 0 .4-9A6 6 0 0 0 6.3 10.6 3.8 3.8 0 0 0 7 18z"/>',
+    partly: '<path d="M8 3v1.5M3 8h1.5M4.5 4.5l1 1M11.5 4.5l-1 1M5.6 10.6a3.5 3.5 0 0 1 5.6-4.1"/><path d="' + CLOUD + '"/>',
+    partlyNight: '<path d="M10.5 4a4.5 4.5 0 0 0-4.8 6.6A4.6 4.6 0 0 1 10.5 4z"/><path d="' + CLOUD + '"/>',
     rain: '<path d="M7 15h10.5a4.5 4.5 0 0 0 .4-9A6 6 0 0 0 6.3 7.6 3.8 3.8 0 0 0 7 15zM8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
     snow: '<path d="M7 15h10.5a4.5 4.5 0 0 0 .4-9A6 6 0 0 0 6.3 7.6 3.8 3.8 0 0 0 7 15zM8 19h.01M12 20h.01M16 19h.01"/>',
-    moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+    sleet: '<path d="M7 15h10.5a4.5 4.5 0 0 0 .4-9A6 6 0 0 0 6.3 7.6 3.8 3.8 0 0 0 7 15zM8 18l-1 3M16 18l-1 3M12 19.5h.01"/>',
+    thunder: '<path d="M7 15h10.5a4.5 4.5 0 0 0 .4-9A6 6 0 0 0 6.3 7.6 3.8 3.8 0 0 0 7 15zM13 15l-2.5 4h3l-2 3.5"/>',
+    fog: '<path d="M4 8h16M3 12h18M5 16h14M8 20h8"/>',
+    wind: '<path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h8"/>',
+    umbrella: '<path d="M3 12a9 9 0 0 1 18 0zM12 12v6a2 2 0 0 0 4 0"/>',
+    trash: '<path d="M4 7h16M10 3h4M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6"/>',
+    vacuum: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.5"/><path d="M8.5 6h7"/>',
     up: '<path d="M6 15l6-6 6 6"/>',
     down: '<path d="M6 9l6 6 6-6"/>',
     stop: '<rect x="7" y="7" width="10" height="10" rx="1.5"/>',
@@ -145,7 +167,7 @@
   HomeyBackend.prototype.onStatus = function (cb) { this._status = cb; };
   HomeyBackend.prototype.init = function () {
     var self = this;
-    if (!window.HomeyAPI) return Promise.reject(new Error('The Homey library did not load (vendor/homey-api.min.js missing).'));
+    if (!window.HomeyAPI) return Promise.reject(new Error('Homey-biblioteket ble ikke lastet (vendor/homey-api.min.js mangler).'));
     return window.HomeyAPI.createLocalAPI({ address: this.address, token: this.token }).then(function (api) {
       self.api = api;
       api.on('connect', function () { self._status('ok'); });
@@ -172,7 +194,7 @@
       api.flow.getFlows().catch(function () { return {}; }),
       api.flow.getAdvancedFlows().catch(function () { return {}; })
     ]).then(function (r) {
-      return pick(r[0], 'basic').concat(pick(r[1], 'advanced')).sort(function (a, b) { return a.name.localeCompare(b.name); });
+      return pick(r[0], 'basic').concat(pick(r[1], 'advanced')).sort(function (a, b) { return a.name.localeCompare(b.name, LOCALE); });
     });
   };
   HomeyBackend.prototype.users = function () {
@@ -183,6 +205,14 @@
     });
   };
   HomeyBackend.prototype.weather = function () { return this.api.weather.getWeather(); };
+  // Homey's own location (needs the Geolocation permission on the API key).
+  HomeyBackend.prototype.location = function () {
+    return this.api.geolocation.getOptionLocation().then(function (r) {
+      var v = (r && r.value) || r || {};
+      var lat = v.latitude != null ? v.latitude : v.lat, lon = v.longitude != null ? v.longitude : v.lon;
+      return typeof lat === 'number' && typeof lon === 'number' ? { lat: lat, lon: lon, name: 'Homeys posisjon' } : null;
+    });
+  };
   HomeyBackend.prototype.setCapability = function (id, capId, value) {
     return this.api.devices.setCapabilityValue({ deviceId: id, capabilityId: capId, value: value });
   };
@@ -198,25 +228,30 @@
 
   // ---------------------------------------------------------------- state
   var backend = null;
-  var state = { zones: {}, devices: {}, flows: [], users: [], weather: null, connected: false };
-  var WATCH = ['onoff', 'dim', 'measure_temperature', 'target_temperature', 'measure_humidity', 'alarm_contact',
-    'alarm_motion', 'alarm_water', 'alarm_smoke', 'alarm_co', 'alarm_tamper', 'locked', 'measure_power',
-    'windowcoverings_set', 'windowcoverings_state', 'measure_luminance', 'measure_co2', 'alarm_battery', 'volume_mute'];
+  var state = { zones: {}, devices: {}, flows: [], users: [], weather: null, forecast: null, connected: false };
 
   function snapshot(d) {
     var co = {};
     Object.keys(d.capabilitiesObj || {}).forEach(function (k) {
       var c = d.capabilitiesObj[k] || {};
-      co[k] = { value: c.value, units: c.units, min: c.min, max: c.max, step: c.step, title: c.title, decimals: c.decimals, setable: c.setable };
+      co[k] = { value: c.value, units: c.units, min: c.min, max: c.max, step: c.step, title: c.title, decimals: c.decimals, setable: c.setable,
+        values: c.values };   // enum options, e.g. for vacuumcleaner_state
     });
-    return { id: d.id, name: d.name, zone: d.zone, class: d.virtualClass || d.class, capabilities: d.capabilities || Object.keys(co), capabilitiesObj: co, available: d.available !== false,
+    return { id: d.id, name: d.name, zone: d.zone, class: d.virtualClass || d.class, driverId: d.driverId || d.driverUri || '',
+      capabilities: d.capabilities || Object.keys(co), capabilitiesObj: co, available: d.available !== false,
       cumulative: !!(d.energyObj && d.energyObj.cumulative) };  // true for whole-home meters (P1 / HAN readers)
   }
   function has(d, c) { return d.capabilitiesObj && d.capabilitiesObj[c] !== undefined; }
   function val(d, c) { return has(d, c) ? d.capabilitiesObj[c].value : undefined; }
 
+  // Waste collection apps (Min Renovasjon, Renovasjon, Norske Tjenester …) show up as devices.
+  function isWaste(d) { return /renovasjon|avfall|tømme|tomme|søppel|soppel|waste|garbage|trash|norske.?tjenester/i.test(d.driverId + ' ' + d.name); }
+  function isVacuum(d) { return d.class === 'vacuumcleaner' || has(d, 'vacuumcleaner_state') || /roborock|vacuum|støvsug/i.test(d.driverId); }
+
   // Which devices show up automatically before the user picks.
   function autoShown(d) {
+    if (isWaste(d)) return false;
+    if (isVacuum(d)) return true;
     if (['light', 'thermostat', 'lock', 'windowcoverings', 'blinds', 'curtain', 'heater', 'socket', 'fan'].indexOf(d.class) >= 0) return true;
     return has(d, 'measure_temperature') || has(d, 'alarm_contact') || has(d, 'alarm_motion') || has(d, 'alarm_water');
   }
@@ -224,6 +259,7 @@
 
   // ---------------------------------------------------------------- tile model
   function kind(d) {
+    if (isVacuum(d)) return 'vacuum';
     if (has(d, 'target_temperature')) return 'thermostat';
     if (has(d, 'locked')) return 'lock';
     if (has(d, 'windowcoverings_set') || has(d, 'windowcoverings_state')) return 'cover';
@@ -233,8 +269,10 @@
   }
   function deviceIcon(d) {
     var c = d.class;
+    if (isVacuum(d)) return 'vacuum';
+    if (isWaste(d)) return 'trash';
     if (c === 'light') return 'bulb';
-    if (c === 'socket') return has(d, 'measure_power') ? 'plug' : 'plug';
+    if (c === 'socket') return 'plug';
     if (c === 'thermostat' || c === 'heater') return 'thermo';
     if (c === 'lock') return val(d, 'locked') === false ? 'unlock' : 'lock';
     if (c === 'windowcoverings' || c === 'blinds' || c === 'curtain' || c === 'sunshade') return 'blinds';
@@ -253,46 +291,83 @@
   }
   function unit(d, c, fallback) { var u = d.capabilitiesObj[c] && d.capabilitiesObj[c].units; return u || fallback || ''; }
 
+  var VAC_STATES = { cleaning: 'Støvsuger', spot_cleaning: 'Punktrengjøring', docked: 'I dokken', charging: 'Lader', stopped: 'Stoppet',
+    returning: 'På vei hjem', paused: 'Pause', error: 'Feil', idle: 'Klar' };
+  function vacuumState(d) {
+    var s = val(d, 'vacuumcleaner_state');
+    if (s != null) return VAC_STATES[s] || cap1(String(s).replace(/_/g, ' '));
+    if (has(d, 'onoff')) return val(d, 'onoff') ? 'Støvsuger' : 'Av';
+    return genericState(d) || '';
+  }
+  function vacuumBusy(d) {
+    var s = val(d, 'vacuumcleaner_state');
+    return s === 'cleaning' || s === 'spot_cleaning' || (s == null && val(d, 'onoff') === true);
+  }
+
+  // Capabilities the dashboard understands; anything else is shown as "title: value".
+  var KNOWN = /^(onoff|dim|light_.*|measure_temperature|target_temperature|measure_humidity|alarm_.*|locked|measure_power|meter_power.*|windowcoverings_.*|measure_luminance|measure_co2|measure_battery|vacuumcleaner_state|volume_.*|speaker_.*|button.*|thermostat_mode)$/;
+  function fmtValue(d, c) {
+    var v = val(d, c);
+    if (v == null || v === '') return '';
+    if (typeof v === 'boolean') return v ? 'Ja' : 'Nei';
+    if (typeof v === 'number') return fmtNum(v, 1) + (unit(d, c) ? ' ' + unit(d, c) : '');
+    return String(v);
+  }
+  function genericState(d) {
+    var ids = Object.keys(d.capabilitiesObj).filter(function (c) { return !KNOWN.test(c) && fmtValue(d, c); });
+    if (!ids.length) return '';
+    var c = ids[0], t = d.capabilitiesObj[c].title;
+    return (t ? t + ': ' : '') + fmtValue(d, c);
+  }
+
   // Returns { cls, big, state, corner, bar }
   function describe(d) {
     var k = kind(d), out = { cls: '', big: '', state: '', corner: '', bar: null };
     var alarm = ['alarm_water', 'alarm_smoke', 'alarm_co', 'alarm_tamper'].filter(function (a) { return val(d, a) === true; });
-    if (k === 'switch' || k === 'dimmer') {
+    if (k === 'vacuum') {
+      out.state = vacuumState(d);
+      if (vacuumBusy(d)) out.cls = 'on';
+      if (typeof val(d, 'measure_battery') === 'number') out.corner = fmtNum(val(d, 'measure_battery'), 0) + ' %';
+    } else if (k === 'switch' || k === 'dimmer') {
       var on = k === 'switch' ? !!val(d, 'onoff') : val(d, 'dim') > 0;
       out.cls = on ? 'on' : '';
-      out.state = on ? (has(d, 'dim') ? Math.round(val(d, 'dim') * 100) + '%' : 'On') : 'Off';
+      out.state = on ? (has(d, 'dim') ? Math.round(val(d, 'dim') * 100) + ' %' : 'På') : 'Av';
       if (on && has(d, 'dim')) out.bar = val(d, 'dim');
       if (has(d, 'measure_power')) out.corner = fmtNum(val(d, 'measure_power'), 0) + ' ' + unit(d, 'measure_power', 'W');
       else if (has(d, 'measure_temperature')) out.corner = fmtNum(val(d, 'measure_temperature')) + '°';
     } else if (k === 'thermostat') {
       var t = val(d, 'measure_temperature'), target = val(d, 'target_temperature');
       out.big = t != null ? fmtNum(t) + '<small>°</small>' : fmtNum(target) + '<small>°</small>';
-      out.state = 'Set to ' + fmtNum(target) + '°' + (val(d, 'onoff') === false ? ' · off' : '');
-      if (typeof t === 'number' && typeof target === 'number' && target > t + 0.2 && val(d, 'onoff') !== false) { out.cls = 'heat'; out.state = 'Heating to ' + fmtNum(target) + '°'; }
+      out.state = 'Satt til ' + fmtNum(target) + '°' + (val(d, 'onoff') === false ? ' · av' : '');
+      if (typeof t === 'number' && typeof target === 'number' && target > t + 0.2 && val(d, 'onoff') !== false) { out.cls = 'heat'; out.state = 'Varmer til ' + fmtNum(target) + '°'; }
     } else if (k === 'lock') {
       var locked = val(d, 'locked');
-      out.state = locked ? 'Locked' : 'Unlocked';
+      out.state = locked ? 'Låst' : 'Ulåst';
       out.cls = locked ? '' : 'alert';
     } else if (k === 'cover') {
       var pos = val(d, 'windowcoverings_set'), mv = val(d, 'windowcoverings_state');
-      out.state = mv === 'up' ? 'Opening…' : mv === 'down' ? 'Closing…' : (typeof pos === 'number' ? (pos >= 0.99 ? 'Open' : pos <= 0.01 ? 'Closed' : Math.round(pos * 100) + '% open') : 'Idle');
+      out.state = mv === 'up' ? 'Åpner …' : mv === 'down' ? 'Lukker …' : (typeof pos === 'number' ? (pos >= 0.99 ? 'Åpen' : pos <= 0.01 ? 'Lukket' : Math.round(pos * 100) + ' % åpen') : 'Står stille');
       if (typeof pos === 'number') out.bar = pos;
     } else {
       if (has(d, 'measure_temperature')) {
         out.big = fmtNum(val(d, 'measure_temperature')) + '<small>°</small>';
-        if (has(d, 'measure_humidity')) out.state = fmtNum(val(d, 'measure_humidity'), 0) + '% humidity';
+        if (has(d, 'measure_humidity')) out.state = fmtNum(val(d, 'measure_humidity'), 0) + ' % fuktighet';
       } else if (has(d, 'measure_power')) {
         out.big = fmtNum(val(d, 'measure_power'), 0) + '<small>' + esc(unit(d, 'measure_power', 'W')) + '</small>';
       } else if (has(d, 'measure_co2')) {
         out.big = fmtNum(val(d, 'measure_co2'), 0) + '<small>ppm</small>';
       }
-      if (has(d, 'alarm_contact')) { var open = !!val(d, 'alarm_contact'); out.state = open ? 'Open' : 'Closed'; if (open) out.cls = 'alert'; }
-      if (has(d, 'alarm_motion')) { var m = !!val(d, 'alarm_motion'); if (!has(d, 'alarm_contact')) out.state = m ? 'Motion' : 'Clear'; if (m) out.cls = 'cool'; }
+      if (has(d, 'alarm_contact')) { var open = !!val(d, 'alarm_contact'); out.state = open ? 'Åpen' : 'Lukket'; if (open) out.cls = 'alert'; }
+      if (has(d, 'alarm_motion')) { var m = !!val(d, 'alarm_motion'); if (!has(d, 'alarm_contact')) out.state = m ? 'Bevegelse' : 'Rolig'; if (m) out.cls = 'cool'; }
       if (has(d, 'measure_luminance') && !out.big) out.corner = fmtNum(val(d, 'measure_luminance'), 0) + ' lx';
-      if (!out.state && !out.big && has(d, 'alarm_water')) out.state = 'Dry';
+      if (!out.state && !out.big && has(d, 'alarm_water')) out.state = 'Tørt';
+      if (!out.state && !out.big) {
+        var p = isWaste(d) ? pickupsOf(d)[0] : null;
+        out.state = p ? cap1(p.label) + ' ' + p.when : genericState(d);
+      }
     }
-    if (alarm.length) { out.cls = 'alert'; out.state = alarm.map(function (a) { return { alarm_water: 'Water!', alarm_smoke: 'Smoke!', alarm_co: 'CO!', alarm_tamper: 'Tampered' }[a]; }).join(' '); }
-    if (val(d, 'alarm_battery') === true && !out.corner) out.corner = 'Low battery';
+    if (alarm.length) { out.cls = 'alert'; out.state = alarm.map(function (a) { return { alarm_water: 'Vann!', alarm_smoke: 'Røyk!', alarm_co: 'CO!', alarm_tamper: 'Sabotasje' }[a]; }).join(' '); }
+    if (val(d, 'alarm_battery') === true && !out.corner) out.corner = 'Lavt batteri';
     return out;
   }
 
@@ -302,10 +377,115 @@
       '<div class="t-top"><span class="t-icon">' + icon(deviceIcon(d)) + '</span><span class="t-value">' + esc(x.corner) + '</span></div>' +
       '<div>' + (x.big ? '<div class="t-big">' + x.big + '</div>' : '') +
       '<div class="t-name">' + esc(d.name) + '</div>' +
-      '<div class="t-state">' + esc(d.available ? x.state : 'Unavailable') + '</div>' +
+      '<div class="t-state">' + esc(d.available ? x.state : 'Utilgjengelig') + '</div>' +
       (showRoomLabel ? '<div class="t-room">' + esc(zoneName(d.zone)) + '</div>' : '') + '</div>' +
       (x.bar != null ? '<span class="t-bar" style="width:' + Math.round(x.bar * 100) + '%"></span>' : '') +
       '</button>';
+  }
+
+  // ---------------------------------------------------------------- waste pickups
+  var MONTHS = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
+  // Turns a capability value into a date, a number of days, or nothing.
+  function parsePickup(v, units, hint) {
+    if (v == null || v === '' || typeof v === 'boolean') return null;
+    if (typeof v === 'number') {
+      if (v > 1e12) return { date: new Date(v) };
+      if (v > 1e9) return { date: new Date(v * 1000) };
+      if (/dag|day|^d$/i.test((units || '') + ' ' + hint) && v >= 0 && v < 400) return { days: Math.round(v) };
+      return null;
+    }
+    var s = String(v).trim(), m;
+    if (/^i ?dag/i.test(s) || /^today/i.test(s)) return { days: 0 };
+    if (/^i ?morgen/i.test(s) || /^tomorrow/i.test(s)) return { days: 1 };
+    if ((m = s.match(/(\d{4})-(\d{2})-(\d{2})/))) return { date: new Date(+m[1], +m[2] - 1, +m[3]) };
+    if ((m = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/))) return { date: new Date(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1]) };
+    if ((m = s.match(/(\d{1,2})\.\s*([a-zæøå]{3})/i))) {
+      var mi = MONTHS.indexOf(m[2].toLowerCase());
+      if (mi >= 0) { var d = new Date(new Date().getFullYear(), mi, +m[1]); if (daysFromToday(d) < -30) d.setFullYear(d.getFullYear() + 1); return { date: d }; }
+    }
+    if ((m = s.match(/(?:om\s*)?(\d+)\s*dag/i))) return { days: +m[1] };
+    return { raw: s };
+  }
+  function pickupsOf(d) {
+    var out = [];
+    Object.keys(d.capabilitiesObj).forEach(function (c) {
+      if (/^(measure_battery|alarm_|onoff$|button)/.test(c)) return;
+      var co = d.capabilitiesObj[c], r = parsePickup(co.value, co.units, c + ' ' + (co.title || ''));
+      if (!r) return;
+      var label = String(co.title || d.name).replace(/^(neste|next)\s+/i, '').replace(/\s*\((dager|days)\)\s*$/i, '');
+      if (r.date) r.days = daysFromToday(r.date);
+      if (r.days != null && r.days < 0) return;
+      out.push({ d: d, label: label, days: r.days, raw: r.raw, when: r.days != null ? dayWord(r.days, r.date) : r.raw });
+    });
+    return out.sort(function (a, b) { return (a.days == null ? 999 : a.days) - (b.days == null ? 999 : b.days); });
+  }
+  function allPickups() {
+    var list = [];
+    allDevices().filter(isWaste).forEach(function (d) { list = list.concat(pickupsOf(d)); });
+    return list.filter(function (p) { return p.days == null || p.days <= 14; })
+      .sort(function (a, b) { return (a.days == null ? 999 : a.days) - (b.days == null ? 999 : b.days); });
+  }
+
+  // ---------------------------------------------------------------- weather (MET Nordic via Open-Meteo)
+  var WMO = {
+    0: ['Klart', 'sun'], 1: ['Lettskyet', 'partly'], 2: ['Delvis skyet', 'partly'], 3: ['Overskyet', 'cloud'],
+    45: ['Tåke', 'fog'], 48: ['Rimtåke', 'fog'], 51: ['Lett yr', 'rain'], 53: ['Yr', 'rain'], 55: ['Kraftig yr', 'rain'],
+    56: ['Underkjølt yr', 'sleet'], 57: ['Underkjølt yr', 'sleet'], 61: ['Lett regn', 'rain'], 63: ['Regn', 'rain'], 65: ['Kraftig regn', 'rain'],
+    66: ['Underkjølt regn', 'sleet'], 67: ['Underkjølt regn', 'sleet'], 71: ['Lett snø', 'snow'], 73: ['Snø', 'snow'], 75: ['Kraftig snø', 'snow'],
+    77: ['Snøkorn', 'snow'], 80: ['Regnbyger', 'rain'], 81: ['Regnbyger', 'rain'], 82: ['Kraftige regnbyger', 'rain'],
+    85: ['Snøbyger', 'snow'], 86: ['Kraftige snøbyger', 'snow'], 95: ['Tordenvær', 'thunder'], 96: ['Tordenvær med hagl', 'thunder'], 99: ['Tordenvær med hagl', 'thunder']
+  };
+  function wxText(code) { return (WMO[code] || ['', 'cloud'])[0]; }
+  function wxIcon(code, isDay) {
+    var i = (WMO[code] || ['', 'cloud'])[1];
+    if (!isDay && i === 'sun') return 'moon';
+    if (!isDay && i === 'partly') return 'partlyNight';
+    return i;
+  }
+  function weatherLocation() {
+    if (cfg.weatherLoc) return Promise.resolve(cfg.weatherLoc);
+    if (backend && backend.location) return backend.location().catch(function () { return null; });
+    return Promise.resolve(null);
+  }
+  function loadForecast() {
+    if (!backend || !cfg.showWeather) return;
+    weatherLocation().then(function (loc) {
+      if (!loc) { state.forecast = null; renderWeather(); return; }
+      var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.lat.toFixed(3) + '&longitude=' + loc.lon.toFixed(3) +
+        '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation,is_day' +
+        '&hourly=temperature_2m,weather_code,precipitation,is_day&daily=temperature_2m_max,temperature_2m_min' +
+        '&timezone=auto&forecast_days=2&wind_speed_unit=ms';
+      return fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }).then(function (j) {
+        var now = Date.now(), hours = [];
+        (j.hourly.time || []).forEach(function (t, i) {
+          var ts = new Date(t).getTime();
+          if (ts > now - 3600000 && hours.length < 13) {
+            hours.push({ time: new Date(t), t: j.hourly.temperature_2m[i], code: j.hourly.weather_code[i], precip: j.hourly.precipitation[i], isDay: !!j.hourly.is_day[i] });
+          }
+        });
+        var c = j.current || {};
+        state.forecast = {
+          place: loc.name, t: c.temperature_2m, feels: c.apparent_temperature, code: c.weather_code, wind: c.wind_speed_10m,
+          precip: c.precipitation, isDay: !!c.is_day, hours: hours,
+          max: j.daily && j.daily.temperature_2m_max ? j.daily.temperature_2m_max[0] : null,
+          min: j.daily && j.daily.temperature_2m_min ? j.daily.temperature_2m_min[0] : null
+        };
+        renderWeather();
+      });
+    }).catch(function () { renderWeather(); });
+  }
+  // "Regn fra kl. 15" / "Opphold de neste timene"
+  function precipOutlook(f) {
+    var hrs = f.hours.slice(0, 12), wet = function (h) { return h.precip >= 0.2; };
+    var kindOf = function (h) { var i = wxIcon(h.code, true); return i === 'snow' ? 'Snø' : i === 'sleet' ? 'Sludd' : 'Regn'; };
+    var nowWet = (f.precip || 0) >= 0.2 || (hrs[0] && wet(hrs[0]));
+    if (nowWet) {
+      var dry = hrs.filter(function (h) { return !wet(h) && h.time > new Date(); })[0];
+      var k = kindOf(hrs.filter(wet)[0] || hrs[0]);
+      return dry ? k + ' nå, opphold fra kl. ' + dry.time.getHours() : k + ' de neste timene';
+    }
+    var first = hrs.filter(wet)[0];
+    return first ? kindOf(first) + ' fra kl. ' + first.time.getHours() : 'Opphold de neste 12 timene';
   }
 
   // ---------------------------------------------------------------- render
@@ -317,7 +497,7 @@
       (children[p] = children[p] || []).push(zones[id]);
     });
     function walk(p) {
-      (children[p] || []).sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); })
+      (children[p] || []).sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', LOCALE); })
         .forEach(function (z) { out.push(z.id); walk(z.id); });
     }
     walk('_root');
@@ -327,12 +507,12 @@
 
   function allDevices() { return Object.keys(state.devices).map(function (k) { return state.devices[k]; }); }
   function shownDevices() { return allDevices().filter(isShown); }
-  function kindRank(d) { return { switch: 0, dimmer: 0, thermostat: 1, cover: 2, lock: 3, sensor: 4 }[kind(d)]; }
-  function zoneName(zid) { return state.zones[zid] ? state.zones[zid].name : 'Other'; }
+  function kindRank(d) { return { switch: 0, dimmer: 0, thermostat: 1, vacuum: 2, cover: 2, lock: 3, sensor: 4 }[kind(d)]; }
+  function zoneName(zid) { return state.zones[zid] ? state.zones[zid].name : 'Annet'; }
   function cssEsc(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/"/g, '\\"'); }
   function joinNames(a) {
     if (a.length <= 1) return a.join('');
-    return a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+    return a.slice(0, -1).join(', ') + ' og ' + a[a.length - 1];
   }
   function avg(list) { return list.reduce(function (s, v) { return s + v; }, 0) / list.length; }
 
@@ -344,12 +524,12 @@
     var out = [];
     allDevices().forEach(function (d) {
       ['alarm_water', 'alarm_smoke', 'alarm_co'].forEach(function (a) {
-        if (val(d, a) === true) out.push({ d: d, level: 3, text: d.name + ' (' + zoneName(d.zone) + ') reports ' + { alarm_water: 'water', alarm_smoke: 'smoke', alarm_co: 'carbon monoxide' }[a] });
+        if (val(d, a) === true) out.push({ d: d, level: 3, text: d.name + ' (' + zoneName(d.zone) + ') melder ' + { alarm_water: 'vannlekkasje', alarm_smoke: 'røyk', alarm_co: 'kullos' }[a] });
       });
     });
     shownDevices().forEach(function (d) {
-      if (val(d, 'alarm_contact') === true) out.push({ d: d, level: 2, text: d.name + ' in ' + zoneName(d.zone) + ' is open' });
-      if (val(d, 'locked') === false) out.push({ d: d, level: 2, text: d.name + ' is unlocked' });
+      if (val(d, 'alarm_contact') === true) out.push({ d: d, level: 2, text: d.name + ' i ' + zoneName(d.zone) + ' står ' + (/vindu|vindauge|window/i.test(d.name) ? 'åpent' : 'åpen') });
+      if (val(d, 'locked') === false) out.push({ d: d, level: 2, text: d.name + ' er ulåst' });
     });
     return out.sort(function (a, b) { return b.level - a.level; });
   }
@@ -371,60 +551,91 @@
     return l.length ? avg(l.map(function (d) { return val(d, 'measure_temperature'); })) : null;
   }
 
-  // ---- header details (weather, inside, power)
-  function weatherIcon(s) {
-    s = String(s || '').toLowerCase();
-    if (/snow|sleet/.test(s)) return 'snow';
-    if (/rain|drizzle|shower|thunder/.test(s)) return 'rain';
-    if (/cloud|overcast|fog|mist/.test(s)) return 'cloud';
-    return isNight() ? 'moon' : 'sun';
-  }
+  // ---- header corner (inside temperature, power)
   function renderMeta() {
-    var el = $('meta'), w = state.weather, h = '';
+    var el = $('meta');
     if (!backend) { el.innerHTML = ''; return; }
-    if (cfg.showWeather && w && typeof w.temperature === 'number') {
-      var st = w.state ? String(w.state).replace(/_/g, ' ').replace(/^./, function (c) { return c.toUpperCase(); }) : '';
-      h += '<div class="m-weather">' + icon(weatherIcon(w.state)) + '<span class="m-temp">' + fmtNum(w.temperature) + '°</span><span class="m-state">' + esc(st) + '</span></div>';
-    }
     var parts = [], t = insideTemp(), p = powerInfo();
-    if (t != null) parts.push('Inside ' + fmtNum(t) + '°');
-    if (p) parts.push(p);
-    if (parts.length) h += '<div class="m-sub">' + esc(parts.join('  ·  ')) + '</div>';
-    el.innerHTML = h;
+    if (t != null) parts.push(icon('home') + '<span>' + fmtNum(t) + '°</span>');
+    if (p) parts.push(icon('bolt') + '<span>' + esc(p) + '</span>');
+    el.innerHTML = parts.map(function (x) { return '<span class="m-item">' + x + '</span>'; }).join('');
   }
-  function renderWeather() { renderMeta(); }
+
+  // ---- weather card
+  function renderWeather() {
+    var el = $('wx'), f = state.forecast, w = state.weather;
+    if (!backend || !cfg.showWeather) { el.innerHTML = ''; el.hidden = true; return; }
+    el.hidden = false;
+    if (!f) {
+      if (w && typeof w.temperature === 'number') {
+        el.innerHTML = '<div class="wx-now">' + icon('cloud') + '<div><div class="wx-temp">' + fmtNum(w.temperature) + '°</div>' +
+          '<div class="wx-desc">' + esc(w.state ? cap1(String(w.state).replace(/_/g, ' ')) : 'Ute nå') + '</div></div></div>' +
+          '<div class="wx-hint">Velg sted i innstillingene for å få værmelding time for time.</div>';
+      } else {
+        el.innerHTML = '<div class="wx-hint">' + icon('cloud') + 'Hold inne tannhjulet og velg sted under «Vær» for å vise værmeldingen her.</div>';
+      }
+      renderSaverSub();
+      return;
+    }
+    var h = '<div class="wx-now">' + icon(wxIcon(f.code, f.isDay)) + '<div class="wx-main"><div class="wx-temp">' + fmtNum(f.t, 0) + '°</div>' +
+      '<div class="wx-desc">' + esc(wxText(f.code)) + '</div></div>' +
+      '<div class="wx-facts"><div>Føles som ' + fmtNum(f.feels, 0) + '°</div><div>' + icon('wind') + fmtNum(f.wind, 0) + ' m/s</div>' +
+      (f.max != null ? '<div>' + fmtNum(f.min, 0) + '° / ' + fmtNum(f.max, 0) + '°</div>' : '') + '</div></div>';
+    h += '<div class="wx-outlook">' + icon('umbrella') + esc(precipOutlook(f)) + '</div>';
+    h += '<div class="wx-hours">' + f.hours.slice(1, 9).map(function (x) {
+      return '<div class="wx-h"><span class="wx-hh">' + x.time.getHours() + '</span>' + icon(wxIcon(x.code, x.isDay)) +
+        '<span class="wx-ht">' + fmtNum(x.t, 0) + '°</span><span class="wx-hp">' + (x.precip >= 0.1 ? fmtNum(x.precip, 1) : '') + '</span></div>';
+    }).join('') + '</div>';
+    el.innerHTML = h;
+    renderSaverSub();
+  }
 
   // ---- the status sentence
   function greeting() {
     var h = new Date().getHours();
-    return h >= 5 && h < 10 ? 'Good morning' : h < 17 && h >= 10 ? 'Good afternoon' : h >= 17 && h < 22 ? 'Good evening' : 'Good night';
+    return h >= 5 && h < 10 ? 'God morgen' : h >= 10 && h < 12 ? 'God formiddag' : h >= 12 && h < 17 ? 'God ettermiddag' : h >= 17 && h < 22 ? 'God kveld' : 'God natt';
   }
   function renderStatus() {
     var el = $('status');
     if (!backend) {
-      el.innerHTML = '<div class="s-greet">Welcome</div><div class="s-line">Hold the gear icon in the corner for a second to connect your Homey.</div>';
+      el.innerHTML = '<div class="s-greet">Velkommen</div><div class="s-line">Hold inne tannhjulet i hjørnet et sekund for å koble til Homey.</div>';
       return;
     }
     var on = lightsOn(), h = '<div class="s-greet">' + greeting() + '</div>';
     if (!on.length) {
-      h += '<div class="s-line">All lights are off.</div>';
+      h += '<div class="s-line">Alle lys er av.</div>';
     } else {
       var rooms = [];
       on.forEach(function (d) { var n = zoneName(d.zone); if (rooms.indexOf(n) < 0) rooms.push(n); });
-      var named = rooms.length > 3 ? rooms.slice(0, 2).concat([(rooms.length - 2) + ' other rooms']) : rooms;
-      h += '<div class="s-line">' + on.length + ' light' + (on.length > 1 ? 's are' : ' is') + ' on in ' + esc(joinNames(named)) + '.' +
-        ' <button class="s-action" data-act="alloff">Turn off</button></div>';
+      var named = rooms.length > 3 ? rooms.slice(0, 2).concat([(rooms.length - 2) + ' andre rom']) : rooms;
+      h += '<div class="s-line">' + on.length + ' lys er på i ' + esc(joinNames(named)) + '.' +
+        ' <button class="s-action" data-act="alloff">Slå av</button></div>';
     }
     var al = alerts();
-    if (al.length) {
-      al.slice(0, 3).forEach(function (a) {
-        h += '<button class="s-alert" data-dev="' + esc(a.d.id) + '">' + icon(a.level > 2 ? 'smoke' : 'doorOpen') + '<span>' + esc(a.text) + '.</span>' + icon('chev') + '</button>';
-      });
-      if (al.length > 3) h += '<div class="s-more">and ' + (al.length - 3) + ' more</div>';
-    } else if (shownDevices().some(function (d) { return has(d, 'alarm_contact') || has(d, 'locked'); })) {
-      h += '<div class="s-calm">Doors and windows are closed.</div>';
+    al.slice(0, 3).forEach(function (a) {
+      h += '<button class="s-alert" data-dev="' + esc(a.d.id) + '">' + icon(a.level > 2 ? 'smoke' : 'doorOpen') + '<span>' + esc(a.text) + '.</span>' + icon('chev') + '</button>';
+    });
+    if (al.length > 3) h += '<div class="s-more">og ' + (al.length - 3) + ' til</div>';
+
+    // Calm extras: vacuums at work, upcoming waste pickups.
+    var extras = '';
+    allDevices().filter(function (d) { return isVacuum(d) && vacuumBusy(d); }).forEach(function (d) {
+      extras += '<button class="s-info" data-dev="' + esc(d.id) + '">' + icon('vacuum') + '<span>' + esc(d.name) + ' støvsuger nå</span></button>';
+    });
+    var pk = allPickups();
+    if (pk.length) {
+      var soon = pk.filter(function (p) { return p.days != null && p.days <= 1; });
+      extras += '<div class="s-waste' + (soon.length ? ' soon' : '') + '">' + icon('trash') + '<div>' +
+        (soon.length ? '<div class="sw-head">' + esc(cap1(joinNames(soon.map(function (p) { return p.label.toLowerCase(); })))) + ' hentes ' + soon[0].when +
+          (soon[0].days === 1 ? ' – husk å sette ut dunken' : '') + '</div>' : '') +
+        '<div class="sw-list">' + pk.filter(function (p) { return soon.indexOf(p) < 0; }).slice(0, 3).map(function (p) {
+          return '<span>' + esc(cap1(p.label)) + ' <b>' + esc(p.when) + '</b></span>';
+        }).join('') + '</div></div></div>';
     }
-    el.innerHTML = h;
+    if (!al.length && !extras && shownDevices().some(function (d) { return has(d, 'alarm_contact') || has(d, 'locked'); })) {
+      h += '<div class="s-calm">Dører og vinduer er lukket.</div>';
+    }
+    el.innerHTML = h + extras;
   }
 
   // ---- scene buttons, with the one that fits the time of day highlighted
@@ -434,7 +645,8 @@
     { re: /leav|away|borte|går ut|reis|work|jobb/i, icon: 'exit', period: 'day' },
     { re: /home|hjem|arriv|kommer/i, icon: 'home', period: 'evening' },
     { re: /movie|film|kino|tv|cinema/i, icon: 'tv', period: 'evening' },
-    { re: /dinner|middag|lunch|lunsj|mat|eat/i, icon: 'cutlery', period: 'evening' }
+    { re: /dinner|middag|lunch|lunsj|mat|eat/i, icon: 'cutlery', period: 'evening' },
+    { re: /støvsug|vacuum|rengjør|robot/i, icon: 'vacuum', period: 'day' }
   ];
   function sceneRule(name) { for (var i = 0; i < SCENE_RULES.length; i++) if (SCENE_RULES[i].re.test(name)) return SCENE_RULES[i]; return null; }
   function period() {
@@ -462,7 +674,7 @@
   function roomZones() {
     var used = {};
     shownDevices().forEach(function (d) { used[d.zone] = true; });
-    return zoneOrder().filter(function (z) { return used[z]; }).concat(used._none ? ['_none'] : []);
+    return zoneOrder().filter(function (z) { return used[z]; });
   }
   function renderRoomBar() {
     var el = $('roombar');
@@ -474,7 +686,7 @@
       return '<button class="room-pill' + (lit ? ' lit' : '') + (alertZones[zid] ? ' alert' : '') + '" data-room="' + esc(zid) + '">' +
         icon(roomIcon(n)) + '<span class="rp-name">' + esc(n) + '</span>' + (t != null ? '<span class="rp-temp">' + fmtNum(t) + '°</span>' : '') + '</button>';
     }).join('');
-    el.innerHTML = h + '<button class="room-pill all" data-room="_all" aria-label="All devices">' + icon('grid') + '<span class="rp-name">All</span></button>';
+    el.innerHTML = h + '<button class="room-pill all" data-room="_all" aria-label="Alle enheter">' + icon('grid') + '<span class="rp-name">Alle</span></button>';
     // Fade the right edge only when the pills overflow and can be scrolled.
     el.classList.toggle('fits', el.scrollWidth <= el.clientWidth + 1);
   }
@@ -491,18 +703,19 @@
   }
   function closeRoom() { openRoomId = null; $('roomBackdrop').hidden = true; $('rooms').innerHTML = ''; }
   function roomDevices() {
-    return shownDevices().filter(function (d) { return openRoomId === '_all' || d.zone === openRoomId; });
+    return (openRoomId === '_all' ? allDevices().filter(function (d) { return isShown(d) || isWaste(d) || isVacuum(d); }) : shownDevices())
+      .filter(function (d) { return openRoomId === '_all' || d.zone === openRoomId; });
   }
   function renderRoomHead() {
-    var zid = openRoomId, isAll = zid === '_all', name = isAll ? 'All devices' : zoneName(zid);
+    var zid = openRoomId, isAll = zid === '_all', name = isAll ? 'Alle enheter' : zoneName(zid);
     var on = isAll ? lightsOn() : lightsOn(zid), t = isAll ? null : roomTemp(zid);
     var meta = [];
     if (t != null) meta.push(fmtNum(t) + '°');
-    meta.push(on.length ? on.length + ' light' + (on.length > 1 ? 's' : '') + ' on' : 'Lights off');
+    meta.push(on.length ? on.length + ' lys på' : 'Lysene er av');
     $('roomHead').innerHTML = '<span class="rh-icon">' + icon(isAll ? 'grid' : roomIcon(name)) + '</span><div class="rh-text"><div class="rh-name">' + esc(name) +
       '</div><div class="rh-meta">' + esc(meta.join('  ·  ')) + '</div></div>' +
-      (on.length ? '<button class="btn" data-act="roomoff">' + icon('bulb') + 'Turn off</button>' : '') +
-      '<button class="icon-btn rh-close" data-act="closeroom" aria-label="Close">' + icon('x') + '</button>';
+      (on.length ? '<button class="btn" data-act="roomoff">' + icon('bulb') + 'Slå av</button>' : '') +
+      '<button class="icon-btn rh-close" data-act="closeroom" aria-label="Lukk">' + icon('x') + '</button>';
   }
   function renderRooms() {
     var rooms = $('rooms');
@@ -512,10 +725,10 @@
     zoneOrder().forEach(function (z, i) { zIndex[z] = i; });
     var list = roomDevices().sort(function (a, b) {
       var byRoom = (zIndex[a.zone] || 0) - (zIndex[b.zone] || 0), byKind = kindRank(a) - kindRank(b);
-      return (cfg.sortBy === 'room' ? (byRoom || byKind) : (byKind || byRoom)) || a.name.localeCompare(b.name);
+      return (cfg.sortBy === 'room' ? (byRoom || byKind) : (byKind || byRoom)) || a.name.localeCompare(b.name, LOCALE);
     });
     rooms.innerHTML = list.length ? '<div class="grid">' + list.map(tileHTML).join('') + '</div>'
-      : '<div class="empty">No devices here. Hold the gear icon to choose devices.</div>';
+      : '<div class="empty">Ingen enheter her. Hold inne tannhjulet for å velge enheter.</div>';
   }
 
   function updateTile(id) {
@@ -533,11 +746,11 @@
     var el = $('presence');
     if (!cfg.showPresence || !state.users.length) { el.innerHTML = ''; return; }
     el.innerHTML = state.users.map(function (u) {
-      return '<span class="avatar' + (u.present ? ' home' : '') + (u.asleep ? ' asleep' : '') + '" title="' + esc(u.name) + (u.present ? ', home' : ', away') + '">' + esc(initials(u.name)) + '</span>';
+      return '<span class="avatar' + (u.present ? ' home' : '') + (u.asleep ? ' asleep' : '') + '" title="' + esc(u.name) + (u.present ? ', hjemme' : ', borte') + '">' + esc(initials(u.name)) + '</span>';
     }).join('');
   }
 
-  function renderAll() { renderPresence(); renderScenes(); renderChips(); renderRooms(); }
+  function renderAll() { renderPresence(); renderScenes(); renderChips(); renderWeather(); renderRooms(); }
 
   // ---------------------------------------------------------------- clock
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -546,15 +759,21 @@
     var h = d.getHours() % 12 || 12;
     return h + ':' + pad(d.getMinutes());
   }
+  function dateStr(d) { return cap1(d.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' })); }
+  function renderSaverSub() {
+    var f = state.forecast, w = state.weather, t = f ? f.t : (w && typeof w.temperature === 'number' ? w.temperature : null);
+    $('saverSub').textContent = dateStr(new Date()) + (cfg.showWeather && t != null ? '  ·  ' + fmtNum(t, 0) + '°' : '');
+  }
   function tick() {
     var now = new Date();
     $('time').textContent = timeStr(now);
-    var ds = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
-    $('date').textContent = ds;
+    $('date').textContent = dateStr(now);
     $('saverTime').textContent = timeStr(now);
-    // Greeting and suggested scene follow the time of day.
-    if (now.getSeconds() === 0 && backend) { renderStatus(); renderScenes(); }
-    $('saverSub').textContent = ds + (state.weather && typeof state.weather.temperature === 'number' && cfg.showWeather ? ' · ' + fmtNum(state.weather.temperature) + '°' : '');
+    if (now.getSeconds() === 0) {
+      renderSaverSub();
+      // Greeting, suggested scene and pickup days follow the time of day.
+      if (backend) { renderStatus(); renderScenes(); }
+    }
     $('saver').classList.toggle('night', isNight());
     // Kiosk hygiene: reload once a day at 04:00 to keep memory and sockets fresh.
     if (now.getHours() === 4 && now.getMinutes() === 0 && now.getSeconds() < 2 && performance.now() > 120000) location.reload();
@@ -579,7 +798,7 @@
     if (idle > 60000 && !$('sheetBackdrop').hidden && $('confirmBackdrop').hidden) closeSheet();
     var idleLimit = isNight() ? Math.min(cfg.idleMin || 1, 1) : cfg.idleMin;
     if (!idleLimit || !$('settings').hidden || !$('sheetBackdrop').hidden) return;
-    if (Date.now() - lastActivity > idleLimit * 60000) $('saver').hidden = false;
+    if (idle > idleLimit * 60000) $('saver').hidden = false;
   }, 5000);
   $('saver').addEventListener('pointerdown', function (e) { e.preventDefault(); e.stopPropagation(); activity(); });
 
@@ -595,7 +814,7 @@
   // ---------------------------------------------------------------- actions
   function setCap(id, capId, value) {
     var d = state.devices[id];
-    if (!d) return Promise.resolve();
+    if (!d || !has(d, capId)) return Promise.resolve();
     var prev = val(d, capId);
     d.capabilitiesObj[capId].value = value;   // optimistic update
     updateTile(id); renderChips();
@@ -603,22 +822,21 @@
     if (el) el.classList.add('busy');
     return backend.setCapability(id, capId, value).catch(function (err) {
       d.capabilitiesObj[capId].value = prev;
-      toast('Could not update ' + d.name + ': ' + (err && err.message || err), true);
+      toast('Kunne ikke endre ' + d.name + ': ' + (err && err.message || err), true);
     }).then(function () { updateTile(id); renderChips(); });
   }
 
   function primaryAction(d) {
     var k = kind(d);
-    if (!d.available) return toast(d.name + ' is unavailable', true);
+    if (!d.available) return toast(d.name + ' er utilgjengelig', true);
     if (k === 'switch') return setCap(d.id, 'onoff', !val(d, 'onoff'));
     if (k === 'lock') {
       var locked = val(d, 'locked');
       if (locked && cfg.lockConfirm) {
-        return confirmBox('Unlock ' + d.name + '?', 'Unlock').then(function (ok) { if (ok) setCap(d.id, 'locked', false); });
+        return confirmBox('Låse opp ' + d.name + '?', 'Lås opp').then(function (ok) { if (ok) setCap(d.id, 'locked', false); });
       }
       return setCap(d.id, 'locked', !locked);
     }
-    if (k === 'sensor') return openSheet(d.id);
     return openSheet(d.id);
   }
 
@@ -654,14 +872,14 @@
     if (!b) return;
     var f = cfg.scenes[+b.getAttribute('data-scene')];
     b.classList.add('fired');
-    backend.trigger(f).then(function () { toast(f.name + ' started'); })
-      .catch(function (err) { toast('Could not start ' + f.name + ': ' + (err && err.message || err), true); })
+    backend.trigger(f).then(function () { toast(f.name + ' er startet'); })
+      .catch(function (err) { toast('Kunne ikke starte ' + f.name + ': ' + (err && err.message || err), true); })
       .then(function () { setTimeout(function () { b.classList.remove('fired'); }, 1200); });
   });
 
   function lightsOffFlow(on, where) {
-    if (!on.length) return toast('The lights are already off');
-    confirmBox('Turn off ' + on.length + ' light' + (on.length > 1 ? 's' : '') + where + '?', 'Turn off').then(function (ok) {
+    if (!on.length) return toast('Lysene er allerede av');
+    confirmBox('Slå av ' + on.length + ' lys' + where + '?', 'Slå av').then(function (ok) {
       if (ok) on.forEach(function (d) { setCap(d.id, 'onoff', false); });
     });
   }
@@ -681,7 +899,7 @@
     if (e.target === $('roomBackdrop') || e.target.closest('[data-act="closeroom"]')) return closeRoom();
     if (e.target.closest('[data-act="roomoff"]')) {
       var all = openRoomId === '_all';
-      lightsOffFlow(all ? lightsOn() : lightsOn(openRoomId), all ? '' : ' in ' + zoneName(openRoomId));
+      lightsOffFlow(all ? lightsOn() : lightsOn(openRoomId), all ? '' : ' i ' + zoneName(openRoomId));
     }
   });
 
@@ -697,17 +915,19 @@
   $('sheetBackdrop').addEventListener('click', function (e) { if (e.target === $('sheetBackdrop')) closeSheet(); });
 
   var LABELS = {
-    measure_temperature: 'Temperature', measure_humidity: 'Humidity', measure_power: 'Power', measure_luminance: 'Light level',
-    measure_co2: 'CO₂', measure_battery: 'Battery', meter_power: 'Energy used', alarm_contact: 'Contact', alarm_motion: 'Motion',
-    alarm_water: 'Water', alarm_smoke: 'Smoke', alarm_battery: 'Battery', alarm_tamper: 'Tamper', target_temperature: 'Target'
+    measure_temperature: 'Temperatur', measure_humidity: 'Fuktighet', measure_power: 'Effekt', measure_luminance: 'Lysnivå',
+    measure_co2: 'CO₂', measure_battery: 'Batteri', meter_power: 'Energibruk', alarm_contact: 'Kontakt', alarm_motion: 'Bevegelse',
+    alarm_water: 'Vann', alarm_smoke: 'Røyk', alarm_co: 'Kullos', alarm_battery: 'Batteri', alarm_tamper: 'Sabotasje'
   };
+  // Controls drawn as buttons/sliders in the sheet, so not repeated as rows.
+  var CONTROLLED = /^(onoff|dim|target_temperature|windowcoverings_.*|locked|vacuumcleaner_state)$/;
   function readable(d, c) {
     var v = val(d, c);
     if (typeof v === 'boolean') {
-      if (c === 'alarm_contact') return v ? 'Open' : 'Closed';
-      if (c === 'alarm_motion') return v ? 'Motion' : 'Clear';
+      if (c === 'alarm_contact') return v ? 'Åpen' : 'Lukket';
+      if (c === 'alarm_motion') return v ? 'Bevegelse' : 'Rolig';
       if (c.indexOf('alarm_') === 0) return v ? 'Alarm' : 'OK';
-      return v ? 'Yes' : 'No';
+      return v ? 'Ja' : 'Nei';
     }
     if (typeof v === 'number') return fmtNum(v, c === 'meter_power' ? 2 : 1) + ' ' + unit(d, c, c === 'measure_battery' ? '%' : '');
     return v == null ? '–' : String(v);
@@ -716,46 +936,60 @@
   function renderSheet() {
     var d = state.devices[sheetId];
     if (!d) return closeSheet();
-    var z = state.zones[d.zone], k = kind(d), h = '';
-    h += '<h2>' + esc(d.name) + '</h2><div class="sub">' + esc(z ? z.name : '') + (d.available ? '' : ' · unavailable') + '</div>';
-    if (has(d, 'onoff')) {
+    var k = kind(d), h = '';
+    h += '<h2>' + esc(d.name) + '</h2><div class="sub">' + esc(zoneName(d.zone)) + (d.available ? '' : ' · utilgjengelig') + '</div>';
+    if (k === 'vacuum') {
+      h += '<div class="vac-state">' + icon('vacuum') + '<span>' + esc(vacuumState(d)) + '</span>' +
+        (typeof val(d, 'measure_battery') === 'number' ? '<span class="vac-bat">' + fmtNum(val(d, 'measure_battery'), 0) + ' %</span>' : '') + '</div>';
+      if (has(d, 'vacuumcleaner_state')) {
+        h += '<div class="btn-row"><button class="btn" data-act="vac-cleaning">' + icon('play') + 'Start</button>' +
+          '<button class="btn" data-act="vac-stopped">' + icon('stop') + 'Stopp</button>' +
+          '<button class="btn" data-act="vac-docked">' + icon('home') + 'Til dokken</button></div>';
+      } else if (has(d, 'onoff')) {
+        var von = !!val(d, 'onoff');
+        h += '<button class="big-toggle' + (von ? ' on' : '') + '" data-act="toggle">' + (von ? 'Støvsuger – trykk for å stoppe' : 'Start støvsuging') + '</button>';
+      }
+    } else if (has(d, 'onoff')) {
       var on = !!val(d, 'onoff');
-      h += '<button class="big-toggle' + (on ? ' on' : '') + '" data-act="toggle">' + (on ? 'On' : 'Off') + '</button>';
+      h += '<button class="big-toggle' + (on ? ' on' : '') + '" data-act="toggle">' + (on ? 'På' : 'Av') + '</button>';
     }
     if (has(d, 'dim')) {
       var dim = Math.round((val(d, 'dim') || 0) * 100);
-      h += '<div class="slider-wrap"><div class="slabel"><span>Brightness</span><b id="dimVal">' + dim + '%</b></div>' +
+      h += '<div class="slider-wrap"><div class="slabel"><span>Lysstyrke</span><b id="dimVal">' + dim + ' %</b></div>' +
         '<input type="range" min="0" max="100" step="1" value="' + dim + '" data-act="dim"></div>';
     }
     if (k === 'thermostat') {
       var c = d.capabilitiesObj.target_temperature;
-      h += '<div class="stepper"><button data-act="tminus" aria-label="Lower">−</button><div class="sval" id="tVal">' +
-        fmtNum(c.value) + '<small>°</small></div><button data-act="tplus" aria-label="Higher">+</button></div>';
+      h += '<div class="stepper"><button data-act="tminus" aria-label="Lavere">−</button><div class="sval" id="tVal">' +
+        fmtNum(c.value) + '<small>°</small></div><button data-act="tplus" aria-label="Høyere">+</button></div>';
     }
     if (k === 'cover') {
       if (has(d, 'windowcoverings_state')) {
-        h += '<div class="btn-row"><button class="btn" data-act="cover-up">' + icon('up') + 'Open</button><button class="btn" data-act="cover-idle">' +
-          icon('stop') + 'Stop</button><button class="btn" data-act="cover-down">' + icon('down') + 'Close</button></div>';
+        h += '<div class="btn-row"><button class="btn" data-act="cover-up">' + icon('up') + 'Åpne</button><button class="btn" data-act="cover-idle">' +
+          icon('stop') + 'Stopp</button><button class="btn" data-act="cover-down">' + icon('down') + 'Lukk</button></div>';
       }
       if (has(d, 'windowcoverings_set')) {
         var pos = Math.round((val(d, 'windowcoverings_set') || 0) * 100);
-        h += '<div class="slider-wrap"><div class="slabel"><span>Position</span><b id="posVal">' + pos + '% open</b></div>' +
+        h += '<div class="slider-wrap"><div class="slabel"><span>Posisjon</span><b id="posVal">' + pos + ' % åpen</b></div>' +
           '<input type="range" min="0" max="100" step="1" value="' + pos + '" data-act="pos"></div>';
       }
     }
     if (k === 'lock') {
       var locked = !!val(d, 'locked');
-      h += '<button class="big-toggle' + (locked ? '' : ' on') + '" data-act="lock">' + (locked ? 'Locked — tap to unlock' : 'Unlocked — tap to lock') + '</button>';
+      h += '<button class="big-toggle' + (locked ? '' : ' on') + '" data-act="lock">' + (locked ? 'Låst – trykk for å låse opp' : 'Ulåst – trykk for å låse') + '</button>';
     }
-    var rows = Object.keys(d.capabilitiesObj).filter(function (cId) {
-      return LABELS[cId] && !(cId === 'target_temperature');
-    });
-    if (rows.length) {
-      h += '<div>' + rows.map(function (cId) {
-        return '<div class="row"><span class="label">' + esc(d.capabilitiesObj[cId].title || LABELS[cId]) + '</span><span class="val">' + esc(readable(d, cId)) + '</span></div>';
-      }).join('') + '</div>';
+    if (isWaste(d)) {
+      var pk = pickupsOf(d);
+      if (pk.length) h += '<div>' + pk.map(function (p) { return '<div class="row"><span class="label">' + esc(cap1(p.label)) + '</span><span class="val">' + esc(p.when) + '</span></div>'; }).join('') + '</div>';
+    } else {
+      var rows = Object.keys(d.capabilitiesObj).filter(function (cId) { return !CONTROLLED.test(cId) && val(d, cId) != null && val(d, cId) !== ''; });
+      if (rows.length) {
+        h += '<div>' + rows.map(function (cId) {
+          return '<div class="row"><span class="label">' + esc(d.capabilitiesObj[cId].title || LABELS[cId] || cId) + '</span><span class="val">' + esc(readable(d, cId)) + '</span></div>';
+        }).join('') + '</div>';
+      }
     }
-    h += '<div class="close-row"><button class="btn" data-act="close">Close</button></div>';
+    h += '<div class="close-row"><button class="btn" data-act="close">Lukk</button></div>';
     $('sheet').innerHTML = h;
   }
 
@@ -772,6 +1006,7 @@
     if (act === 'close') return closeSheet();
     if (act === 'toggle') return setCap(d.id, 'onoff', !val(d, 'onoff'));
     if (act === 'lock') return primaryAction(d);
+    if (act.indexOf('vac-') === 0) return setCap(d.id, 'vacuumcleaner_state', act.slice(4));
     if (act === 'tminus' || act === 'tplus') {
       var c = d.capabilitiesObj.target_temperature, step = c.step || 0.5;
       var min = c.min != null ? c.min : 5, max = c.max != null ? c.max : 35;
@@ -792,8 +1027,8 @@
     if (!d) return;
     dragging = true;
     var v = +e.target.value / 100;
-    if (act === 'dim') { $('dimVal').textContent = Math.round(v * 100) + '%'; throttledSend(d.id, 'dim', v); }
-    if (act === 'pos') { $('posVal').textContent = Math.round(v * 100) + '% open'; throttledSend(d.id, 'windowcoverings_set', v); }
+    if (act === 'dim') { $('dimVal').textContent = Math.round(v * 100) + ' %'; throttledSend(d.id, 'dim', v); }
+    if (act === 'pos') { $('posVal').textContent = Math.round(v * 100) + ' % åpen'; throttledSend(d.id, 'windowcoverings_set', v); }
   });
   $('sheet').addEventListener('change', function () { setTimeout(function () { dragging = false; }, 600); });
 
@@ -803,50 +1038,59 @@
     function start(e) { e.preventDefault(); btn.classList.add('holding'); t = setTimeout(function () { btn.classList.remove('holding'); openSettings(); }, 900); }
     function stop() { clearTimeout(t); btn.classList.remove('holding'); }
     btn.addEventListener('pointerdown', start);
-    btn.addEventListener('pointerup', function () { if (t && btn.classList.contains('holding')) toast('Hold the gear for 1 second to open settings'); stop(); });
+    btn.addEventListener('pointerup', function () { if (t && btn.classList.contains('holding')) toast('Hold inne tannhjulet i ett sekund for å åpne innstillingene'); stop(); });
     btn.addEventListener('pointerleave', stop);
     btn.addEventListener('pointercancel', stop);
   })();
 
-  var settingsMsg = null;
+  var settingsMsg = null, placeResults = [], placeMsg = '', debugId = '';
   function openSettings() { $('settings').hidden = false; renderSettings(); }
-  function closeSettings() { $('settings').hidden = true; settingsMsg = null; renderAll(); }
+  function closeSettings() { $('settings').hidden = true; settingsMsg = null; placeResults = []; placeMsg = ''; renderAll(); loadForecast(); }
 
   function renderSettings() {
     var s = '', connected = !!backend;
-    s += '<div class="settings-bar"><h1>Settings</h1><button class="btn primary" data-s="done">Done</button></div>';
+    s += '<div class="settings-bar"><h1>Innstillinger</h1><button class="btn primary" data-s="done">Ferdig</button></div>';
 
-    s += '<h3>Connect to Homey</h3><div class="card">' +
-      '<div class="field"><label for="sAddr">Homey IP address</label><input type="text" id="sAddr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="192.168.1.50" value="' + esc(cfg.address) + '">' +
-      '<div class="hint">Find it in the Homey app: Settings → General → Network. Will connect to <code id="sResolved">' + esc(resolveAddress(cfg.address) || '…') + '</code></div></div>' +
-      '<div class="field"><label for="sToken">API key</label><input type="password" id="sToken" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Paste your API key" value="' + esc(cfg.token) + '">' +
-      '<div class="hint">Create one at my.homey.app → Settings → API Keys. Stored only on this iPad.</div></div>' +
-      '<div class="field"><div class="inline"><button class="btn primary" data-s="connect">Connect</button><button class="btn" data-s="demo">' + (cfg.demo ? 'Demo mode is on' : 'Try demo mode') + '</button></div></div></div>';
+    s += '<h3>Koble til Homey</h3><div class="card">' +
+      '<div class="field"><label for="sAddr">Homeys IP-adresse</label><input type="text" id="sAddr" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="192.168.1.50" value="' + esc(cfg.address) + '">' +
+      '<div class="hint">Står i Homey-appen under Innstillinger → Generelt → Nettverk. Kobler til <code id="sResolved">' + esc(resolveAddress(cfg.address) || '…') + '</code></div></div>' +
+      '<div class="field"><label for="sToken">API-nøkkel</label><input type="password" id="sToken" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Lim inn API-nøkkelen" value="' + esc(cfg.token) + '">' +
+      '<div class="hint">Lag en på my.homey.app → Innstillinger → API-nøkler. Lagres bare på denne iPaden.</div></div>' +
+      '<div class="field"><div class="inline"><button class="btn primary" data-s="connect">Koble til</button><button class="btn" data-s="demo">' + (cfg.demo ? 'Demomodus er på' : 'Prøv demomodus') + '</button></div></div></div>';
     if (settingsMsg) s += '<div class="status-msg ' + settingsMsg.type + '">' + settingsMsg.html + '</div>';
+
+    // Weather location
+    var locTxt = cfg.weatherLoc ? 'Viser vær for <b>' + esc(cfg.weatherLoc.name) + '</b>.' : 'Bruker Homeys posisjon (krever tillatelsen «Geolokasjon: se» på API-nøkkelen).';
+    s += '<h3>Vær</h3><div class="card"><div class="field"><label for="sPlace">Sted for værmeldingen</label><div class="hint">' + locTxt + '</div>' +
+      '<div class="inline"><input type="text" id="sPlace" placeholder="F.eks. Bergen eller postnummer" autocorrect="off" spellcheck="false"><button class="btn" data-s="place-search">Søk</button>' +
+      (cfg.weatherLoc ? '<button class="btn" data-s="place-homey">Bruk Homeys posisjon</button>' : '') + '</div>' +
+      (placeMsg ? '<div class="hint">' + esc(placeMsg) + '</div>' : '') +
+      placeResults.map(function (p, i) { return '<button class="check place" data-place="' + i + '">' + esc(p.label) + '</button>'; }).join('') +
+      '<div class="hint">Værmeldingen kommer fra Meteorologisk institutt (MET Nordic) via Open-Meteo.</div></div></div>';
 
     if (connected) {
       // Scenes
-      s += '<h3>Scene buttons</h3><p class="lead">Flows that start with "This flow is started" can be used as buttons.</p><div class="card">';
-      if (!state.flows.length) s += '<div class="check">No startable flows found.</div>';
+      s += '<h3>Scenknapper</h3><p class="lead">Flows som starter med «Denne flowen er startet» kan brukes som knapper.</p><div class="card">';
+      if (!state.flows.length) s += '<div class="check">Fant ingen flows som kan startes.</div>';
       state.flows.forEach(function (f) {
         var on = (cfg.scenes || []).some(function (x) { return x.id === f.id; });
         s += '<label class="check"><input type="checkbox" data-flow="' + esc(f.id) + '"' + (on ? ' checked' : '') + '>' + esc(f.name) +
-          '<span class="cmeta">' + (f.type === 'advanced' ? 'Advanced flow' : 'Flow') + '</span></label>';
+          '<span class="cmeta">' + (f.type === 'advanced' ? 'Avansert flow' : 'Flow') + '</span></label>';
       });
       s += '</div>';
 
       // Devices
-      s += '<h3>Devices on the dashboard</h3><p class="lead">' + (cfg.shown ? 'Your selection.' : 'Showing a suggested selection.') +
-        ' <button class="btn small" data-s="all">Select all</button> <button class="btn small" data-s="none">Clear</button> <button class="btn small" data-s="auto">Suggested</button></p>';
+      s += '<h3>Enheter på dashbordet</h3><p class="lead">' + (cfg.shown ? 'Ditt utvalg.' : 'Viser et foreslått utvalg.') +
+        ' Søppeltømming vises i midten uansett. <button class="btn small" data-s="all">Velg alle</button> <button class="btn small" data-s="none">Fjern alle</button> <button class="btn small" data-s="auto">Foreslått</button></p>';
       var byZone = {};
-      Object.keys(state.devices).forEach(function (id) { var d = state.devices[id]; (byZone[d.zone] = byZone[d.zone] || []).push(d); });
+      allDevices().forEach(function (d) { (byZone[d.zone] = byZone[d.zone] || []).push(d); });
       zoneOrder().concat(['_none']).forEach(function (zid) {
         var list = byZone[zid];
         if (!list) return;
-        list.sort(function (a, b) { return a.name.localeCompare(b.name); });
+        list.sort(function (a, b) { return a.name.localeCompare(b.name, LOCALE); });
         var count = list.filter(isShown).length;
-        s += '<details class="zone-group card"' + (count ? ' open' : '') + '><summary>' + esc(state.zones[zid] ? state.zones[zid].name : 'Other') +
-          '<span>' + count + ' of ' + list.length + '</span></summary>';
+        s += '<details class="zone-group card"' + (count ? ' open' : '') + '><summary>' + esc(zoneName(zid)) +
+          '<span>' + count + ' av ' + list.length + '</span></summary>';
         list.forEach(function (d) {
           s += '<label class="check"><input type="checkbox" data-dev="' + esc(d.id) + '"' + (isShown(d) ? ' checked' : '') + '>' + esc(d.name) +
             '<span class="cmeta">' + esc(d.class) + '</span></label>';
@@ -855,26 +1099,56 @@
       });
     }
 
-    s += '<h3>Display</h3><div class="card">' +
-      '<div class="field"><label for="sSort">Order tiles by</label><select id="sSort">' +
-      '<option value="type"' + (cfg.sortBy !== 'room' ? ' selected' : '') + '>Type: lights first, then climate, blinds, locks, sensors</option>' +
-      '<option value="room"' + (cfg.sortBy === 'room' ? ' selected' : '') + '>Room</option></select></div>' +
-      '<div class="field"><label for="sIdle">Screensaver after (minutes idle, 0 = never)</label><input type="number" id="sIdle" min="0" max="120" value="' + esc(cfg.idleMin) + '"></div>' +
-      '<div class="field"><label>Night hours (dark clock after 1 minute idle)</label><div class="inline"><input type="time" id="sNightFrom" value="' + esc(cfg.nightFrom) + '"><input type="time" id="sNightTo" value="' + esc(cfg.nightTo) + '"></div></div>' +
-      '<label class="check"><input type="checkbox" id="sWeather"' + (cfg.showWeather ? ' checked' : '') + '>Show weather</label>' +
-      '<label class="check"><input type="checkbox" id="sPresence"' + (cfg.showPresence ? ' checked' : '') + '>Show who is home</label>' +
-      '<label class="check"><input type="checkbox" id="s24h"' + (cfg.use24h ? ' checked' : '') + '>24-hour clock</label>' +
-      '<label class="check"><input type="checkbox" id="sLockConfirm"' + (cfg.lockConfirm ? ' checked' : '') + '>Ask before unlocking locks</label>' +
-      '<div class="field"><label for="sTopInset">Space at the top for the iPad status bar (pixels — leave empty for automatic, ' + (STANDALONE ? '30' : '0') + ')</label>' +
-      '<input type="number" id="sTopInset" min="0" max="120" placeholder="Automatic" value="' + (typeof cfg.topInset === 'number' ? cfg.topInset : '') + '"></div>' +
+    s += '<h3>Visning</h3><div class="card">' +
+      '<div class="field"><label for="sSort">Sorter enheter etter</label><select id="sSort">' +
+      '<option value="type"' + (cfg.sortBy !== 'room' ? ' selected' : '') + '>Type: lys først, så klima, gardiner, låser og sensorer</option>' +
+      '<option value="room"' + (cfg.sortBy === 'room' ? ' selected' : '') + '>Rom</option></select></div>' +
+      '<div class="field"><label for="sIdle">Skjermsparer etter (minutter uten berøring, 0 = aldri)</label><input type="number" id="sIdle" min="0" max="120" value="' + esc(cfg.idleMin) + '"></div>' +
+      '<div class="field"><label>Natt (mørk klokke etter 1 minutt)</label><div class="inline"><input type="time" id="sNightFrom" value="' + esc(cfg.nightFrom) + '"><input type="time" id="sNightTo" value="' + esc(cfg.nightTo) + '"></div></div>' +
+      '<label class="check"><input type="checkbox" id="sWeather"' + (cfg.showWeather ? ' checked' : '') + '>Vis vær</label>' +
+      '<label class="check"><input type="checkbox" id="sPresence"' + (cfg.showPresence ? ' checked' : '') + '>Vis hvem som er hjemme</label>' +
+      '<label class="check"><input type="checkbox" id="s24h"' + (cfg.use24h ? ' checked' : '') + '>24-timersklokke</label>' +
+      '<label class="check"><input type="checkbox" id="sLockConfirm"' + (cfg.lockConfirm ? ' checked' : '') + '>Spør før dører låses opp</label>' +
+      '<div class="field"><label for="sTopInset">Plass øverst til iPadens statuslinje (piksler – tomt betyr automatisk, ' + (STANDALONE ? '30' : '0') + ')</label>' +
+      '<input type="number" id="sTopInset" min="0" max="120" placeholder="Automatisk" value="' + (typeof cfg.topInset === 'number' ? cfg.topInset : '') + '"></div>' +
       '</div>';
 
-    s += '<h3>Backup</h3><div class="card"><div class="field"><label for="sBackup">Settings without the API key — copy to keep, paste to restore</label>' +
+    if (connected) {
+      s += '<h3>Feilsøking</h3><div class="card"><div class="field"><label for="sDebug">Vis rådata for en enhet (nyttig hvis noe vises feil)</label>' +
+        '<select id="sDebug"><option value="">Velg enhet …</option>' + allDevices().sort(function (a, b) { return a.name.localeCompare(b.name, LOCALE); }).map(function (d) {
+          return '<option value="' + esc(d.id) + '"' + (d.id === debugId ? ' selected' : '') + '>' + esc(d.name) + '</option>';
+        }).join('') + '</select>' + (debugId && state.devices[debugId] ? '<textarea readonly spellcheck="false">' + esc(debugJSON(state.devices[debugId])) + '</textarea>' : '') + '</div></div>';
+    }
+
+    s += '<h3>Sikkerhetskopi</h3><div class="card"><div class="field"><label for="sBackup">Innstillingene uten API-nøkkelen – kopier for å ta vare på, lim inn for å gjenopprette</label>' +
       '<textarea id="sBackup" spellcheck="false">' + esc(JSON.stringify(exportable(), null, 1)) + '</textarea>' +
-      '<div class="inline"><button class="btn" data-s="import">Restore from text</button><button class="btn" data-s="reload">Reload dashboard</button><button class="btn danger" data-s="reset">Reset everything</button></div></div></div>';
+      '<div class="inline"><button class="btn" data-s="import">Gjenopprett fra tekst</button><button class="btn" data-s="reload">Last inn på nytt</button><button class="btn danger" data-s="reset">Nullstill alt</button></div></div></div>';
 
     $('settingsInner').innerHTML = s;
     $('sAddr').addEventListener('input', function () { $('sResolved').textContent = resolveAddress(this.value) || '…'; });
+    $('sPlace').addEventListener('keydown', function (e) { if (e.key === 'Enter') searchPlace(); });
+  }
+
+  function debugJSON(d) {
+    var caps = {};
+    Object.keys(d.capabilitiesObj).forEach(function (c) { var o = d.capabilitiesObj[c]; caps[c] = { title: o.title, value: o.value, units: o.units }; });
+    return JSON.stringify({ name: d.name, class: d.class, driverId: d.driverId, capabilities: caps }, null, 1);
+  }
+
+  function searchPlace() {
+    var q = $('sPlace').value.trim();
+    if (!q) return;
+    placeMsg = 'Søker …'; placeResults = []; renderSettings();
+    fetch('https://geocoding-api.open-meteo.com/v1/search?count=6&language=nb&name=' + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        placeResults = (j.results || []).map(function (p) {
+          return { name: p.name, lat: p.latitude, lon: p.longitude, label: [p.name, p.admin2 || p.admin1, p.country].filter(Boolean).join(', ') };
+        });
+        placeMsg = placeResults.length ? 'Velg riktig sted:' : 'Fant ingen steder med det navnet.';
+        renderSettings();
+      })
+      .catch(function () { placeMsg = 'Søket feilet. Er iPaden koblet til internett?'; renderSettings(); });
   }
 
   function exportable() {
@@ -908,25 +1182,36 @@
       cfg.scenes = (cfg.scenes || []).filter(function (x) { return x.id !== fid; });
       if (t.checked && f) cfg.scenes.push(f);
       saveConfig();
-    } else if (t.id && t.id.indexOf('s') === 0 && ['sAddr', 'sToken', 'sBackup'].indexOf(t.id) < 0) {
+    } else if (t.id === 'sDebug') {
+      debugId = t.value; renderSettings();
+    } else if (t.id && t.id.indexOf('s') === 0 && ['sAddr', 'sToken', 'sBackup', 'sPlace'].indexOf(t.id) < 0) {
       readDisplayFields(); saveConfig(); tick();
     }
   });
 
   $('settings').addEventListener('click', function (e) {
+    var pl = e.target.closest('[data-place]');
+    if (pl) {
+      var p = placeResults[+pl.getAttribute('data-place')];
+      cfg.weatherLoc = { name: p.name, lat: p.lat, lon: p.lon };
+      saveConfig(); placeResults = []; placeMsg = ''; renderSettings(); loadForecast();
+      return;
+    }
     var b = e.target.closest('[data-s]');
     if (!b) return;
     var a = b.getAttribute('data-s');
     if (a === 'done') { readDisplayFields(); saveConfig(); closeSettings(); }
+    if (a === 'place-search') searchPlace();
+    if (a === 'place-homey') { cfg.weatherLoc = null; saveConfig(); renderSettings(); loadForecast(); }
     if (a === 'connect') {
       cfg.address = $('sAddr').value.trim();
       cfg.token = $('sToken').value.trim();
       cfg.demo = false;
       saveConfig();
-      if (!cfg.address || !cfg.token) { settingsMsg = { type: 'err', html: 'Enter both the IP address and the API key.' }; return renderSettings(); }
-      settingsMsg = { type: 'ok', html: 'Connecting…' }; renderSettings();
+      if (!cfg.address || !cfg.token) { settingsMsg = { type: 'err', html: 'Skriv inn både IP-adressen og API-nøkkelen.' }; return renderSettings(); }
+      settingsMsg = { type: 'ok', html: 'Kobler til …' }; renderSettings();
       start().then(function () {
-        settingsMsg = { type: 'ok', html: 'Connected — found ' + Object.keys(state.devices).length + ' devices and ' + state.flows.length + ' startable flows. Choose what to show below.' };
+        settingsMsg = { type: 'ok', html: 'Tilkoblet – fant ' + Object.keys(state.devices).length + ' enheter og ' + state.flows.length + ' flows som kan startes. Velg hva som skal vises nedenfor.' };
         renderSettings();
       }).catch(function (err) { settingsMsg = { type: 'err', html: connectErrorHTML(err) }; renderSettings(); });
     }
@@ -936,9 +1221,9 @@
         cfg.scenes = []; cfg.shown = null;
         start().then(function () {
           cfg.scenes = state.flows.slice(); saveConfig();
-          settingsMsg = { type: 'ok', html: 'Demo mode is on, with sample devices. Tap Done to look around.' }; renderSettings();
+          settingsMsg = { type: 'ok', html: 'Demomodus er på, med eksempelenheter. Trykk Ferdig for å se deg rundt.' }; renderSettings();
         });
-      } else { backend = null; state.devices = {}; state.flows = []; state.users = []; state.weather = null; cfg.scenes = []; cfg.shown = null; saveConfig(); settingsMsg = null; renderSettings(); }
+      } else { backend = null; state.devices = {}; state.flows = []; state.users = []; state.weather = null; state.forecast = null; cfg.scenes = []; cfg.shown = null; saveConfig(); settingsMsg = null; renderSettings(); }
     }
     if (a === 'all' || a === 'none' || a === 'auto') {
       cfg.shown = a === 'auto' ? null : a === 'all' ? Object.keys(state.devices) : [];
@@ -949,12 +1234,12 @@
         var obj = JSON.parse($('sBackup').value);
         var token = cfg.token;
         cfg = Object.assign({}, DEFAULTS, obj, { token: token });
-        saveConfig(); settingsMsg = { type: 'ok', html: 'Settings restored.' }; renderSettings();
-      } catch (err) { settingsMsg = { type: 'err', html: 'That text is not valid settings JSON.' }; renderSettings(); }
+        saveConfig(); settingsMsg = { type: 'ok', html: 'Innstillingene er gjenopprettet.' }; renderSettings();
+      } catch (err) { settingsMsg = { type: 'err', html: 'Teksten er ikke gyldige innstillinger.' }; renderSettings(); }
     }
     if (a === 'reload') location.reload();
     if (a === 'reset') {
-      confirmBox('Remove all settings, including the API key, from this iPad?', 'Reset').then(function (ok) {
+      confirmBox('Fjerne alle innstillinger, også API-nøkkelen, fra denne iPaden?', 'Nullstill').then(function (ok) {
         if (!ok) return;
         try { localStorage.removeItem(STORE_KEY); } catch (err) { /* ignore */ }
         location.reload();
@@ -965,10 +1250,10 @@
   function connectErrorHTML(err) {
     var msg = esc(err && err.message || String(err));
     var addr = esc(resolveAddress(cfg.address));
-    if (/No Homey Found/i.test(msg)) return 'Something answered at <code>' + addr + '</code>, but it is not a Homey. Check the IP address.';
-    if (/401|403|unauthori|forbidden|invalid token|missing scope/i.test(msg)) return 'Homey refused the API key (' + msg + '). Make sure you copied the whole key and gave it the scopes listed in the README.';
-    return 'Could not reach Homey at <code>' + addr + '</code> (' + msg + ').<br>Check that the iPad is on the same Wi-Fi as Homey, the IP is right, and try opening <code>' +
-      addr + '/api/manager/system/ping</code> in Safari — it should show a short reply.';
+    if (/No Homey Found/i.test(msg)) return 'Noe svarte på <code>' + addr + '</code>, men det er ikke en Homey. Sjekk IP-adressen.';
+    if (/401|403|unauthori|forbidden|invalid token|missing scope/i.test(msg)) return 'Homey avviste API-nøkkelen (' + msg + '). Sjekk at hele nøkkelen er kopiert, og at den har tillatelsene som står i README.';
+    return 'Fikk ikke kontakt med Homey på <code>' + addr + '</code> (' + msg + ').<br>Sjekk at iPaden er på samme wifi som Homey, at IP-adressen stemmer, og prøv å åpne <code>' +
+      addr + '/api/manager/system/ping</code> i Safari – da skal du få et kort svar.';
   }
 
   // ---------------------------------------------------------------- startup
@@ -977,6 +1262,7 @@
   function loadExtras() {
     backend.users().then(function (u) { state.users = u; renderPresence(); }).catch(function () { state.users = []; renderPresence(); });
     backend.weather().then(function (w) { state.weather = w; renderWeather(); }).catch(function () { state.weather = null; renderWeather(); });
+    loadForecast();
   }
 
   function applyFresh(devs) {
@@ -1010,11 +1296,9 @@
         var ids = state.flows.map(function (f) { return f.id; });
         cfg.scenes = (cfg.scenes || []).filter(function (s) { return ids.indexOf(s.id) >= 0; });
         renderAll();
-        // Live updates for every capability we can display (all devices, so changing the selection needs no reconnect).
+        // Live updates for every capability of every device, so nothing needs a reconnect.
         Object.keys(state.devices).forEach(function (id) {
-          var d = state.devices[id];
-          WATCH.forEach(function (c) {
-            if (!has(d, c)) return;
+          Object.keys(state.devices[id].capabilitiesObj).forEach(function (c) {
             b.watch(id, c, function (v) {
               if (gen !== generation || !state.devices[id]) return;
               state.devices[id].capabilitiesObj[c].value = v;
@@ -1035,21 +1319,24 @@
   setInterval(function () {
     if (backend && backend.refresh && !document.hidden) backend.refresh().then(applyFresh).catch(function () { setConn('bad'); });
   }, 120000);
-  setInterval(function () { if (backend) loadExtras(); }, 10 * 60000);
+  setInterval(function () { if (backend) loadExtras(); }, 15 * 60000);
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') {
       requestWakeLock();
       if (backend) backend.refresh().then(applyFresh).catch(function () {});
     }
   });
+  // Re-check whether the room pills overflow after rotating the iPad.
+  window.addEventListener('resize', function () { if (backend) renderRoomBar(); });
 
   ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, activity, { capture: true, passive: true }); });
 
   applyTopInset();
   tick();
+  renderSaverSub();
   setInterval(tick, 1000);
   renderAll();
   if (cfg.demo || (cfg.address && cfg.token)) {
-    start().catch(function (err) { toast('Could not connect to Homey — hold the gear to check settings. (' + (err && err.message || err) + ')', true); });
+    start().catch(function (err) { toast('Fikk ikke kontakt med Homey – hold inne tannhjulet for å sjekke innstillingene. (' + (err && err.message || err) + ')', true); });
   }
 })();

@@ -1,18 +1,18 @@
 <!doctype html>
-<html lang="en">
+<html lang="nb">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>Home Panel</title>
+  <title>Hjemmepanel</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Home Panel">
+  <meta name="apple-mobile-web-app-title" content="Hjemmepanel">
   <meta name="theme-color" content="#0e1014">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <div id="app">
@@ -24,8 +24,8 @@
       <div class="top-right">
        <div class="top-actions">
         <div class="presence" id="presence"></div>
-        <span class="conn" id="conn" title="Connection"></span>
-        <button class="icon-btn" id="settingsBtn" aria-label="Settings (hold)">
+        <span class="conn" id="conn" title="Tilkobling"></span>
+        <button class="icon-btn" id="settingsBtn" aria-label="Innstillinger (hold inne)">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         </button>
        </div>
@@ -33,7 +33,10 @@
       </div>
     </header>
 
-    <section class="status" id="status" aria-live="polite"></section>
+    <section class="center">
+      <div class="status" id="status" aria-live="polite"></div>
+      <div class="wx" id="wx" hidden></div>
+    </section>
 
     <nav class="scenes" id="scenes"></nav>
 
@@ -58,7 +61,7 @@
     <div class="dialog" role="alertdialog" aria-modal="true">
       <p id="confirmText"></p>
       <div class="dialog-actions">
-        <button class="btn" id="confirmNo">Cancel</button>
+        <button class="btn" id="confirmNo">Avbryt</button>
         <button class="btn primary" id="confirmYes">OK</button>
       </div>
     </div>
@@ -78,7 +81,7 @@
   <div class="toast" id="toast" hidden></div>
 
   <script src="vendor/homey-api.min.js"></script>
-  <script src="demo.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="demo.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 {
-  "name": "Home Panel",
-  "short_name": "Home Panel",
+  "name": "Hjemmepanel",
+  "short_name": "Hjemmepanel",
   "start_url": "./",
   "display": "standalone",
   "orientation": "any",

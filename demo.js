@@ -3,32 +3,42 @@
   'use strict';
 
   function cap(value, extra) { return Object.assign({ value: value }, extra || {}); }
+  function inDays(n) { var d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
 
   function makeDevices() {
     var list = [
-      ['d1', 'Ceiling light', 'living', 'light', { onoff: cap(true), dim: cap(0.7) }],
-      ['d2', 'Floor lamp', 'living', 'light', { onoff: cap(false), dim: cap(0.4) }],
-      ['d3', 'TV socket', 'living', 'socket', { onoff: cap(true), measure_power: cap(86, { units: 'W' }) }],
-      ['d4', 'Thermostat', 'living', 'thermostat', { measure_temperature: cap(21.4, { units: '°C' }), target_temperature: cap(21.5, { units: '°C', min: 5, max: 30, step: 0.5 }) }],
-      ['d5', 'Island pendants', 'kitchen', 'light', { onoff: cap(true), dim: cap(1) }],
-      ['d6', 'Coffee machine', 'kitchen', 'socket', { onoff: cap(false), measure_power: cap(0, { units: 'W' }) }],
-      ['d7', 'Leak sensor', 'kitchen', 'sensor', { alarm_water: cap(false), measure_temperature: cap(19.8, { units: '°C' }) }],
-      ['d8', 'Front door', 'hall', 'lock', { locked: cap(true) }],
-      ['d9', 'Door sensor', 'hall', 'sensor', { alarm_contact: cap(false) }],
-      ['d10', 'Motion', 'hall', 'sensor', { alarm_motion: cap(false), measure_luminance: cap(42, { units: 'lx' }) }],
-      ['d11', 'Bedside left', 'bedroom', 'light', { onoff: cap(false), dim: cap(0.3) }],
-      ['d12', 'Blinds', 'bedroom', 'windowcoverings', { windowcoverings_set: cap(0.6), windowcoverings_state: cap('idle') }],
-      ['d13', 'Climate', 'bedroom', 'sensor', { measure_temperature: cap(18.9, { units: '°C' }), measure_humidity: cap(46, { units: '%' }) }],
-      ['d14', 'Desk lamp', 'office', 'light', { onoff: cap(true), dim: cap(0.85) }],
-      ['d15', 'Window', 'office', 'sensor', { alarm_contact: cap(true) }],
-      ['d16', 'Floor heating', 'bath', 'thermostat', { measure_temperature: cap(23.1, { units: '°C' }), target_temperature: cap(24, { units: '°C', min: 5, max: 35, step: 0.5 }), onoff: cap(true) }],
-      ['d17', 'Main meter', 'home', 'sensor', { measure_power: cap(1840, { units: 'W' }) }]
+      ['d1', 'Taklampe', 'living', 'light', { onoff: cap(true), dim: cap(0.7) }],
+      ['d2', 'Gulvlampe', 'living', 'light', { onoff: cap(false), dim: cap(0.4) }],
+      ['d3', 'TV-stikk', 'living', 'socket', { onoff: cap(true), measure_power: cap(86, { units: 'W' }) }],
+      ['d4', 'Termostat', 'living', 'thermostat', { measure_temperature: cap(21.4, { units: '°C' }), target_temperature: cap(21.5, { units: '°C', min: 5, max: 30, step: 0.5 }) }],
+      ['d5', 'Kjøkkenøy', 'kitchen', 'light', { onoff: cap(true), dim: cap(1) }],
+      ['d6', 'Kaffemaskin', 'kitchen', 'socket', { onoff: cap(false), measure_power: cap(0, { units: 'W' }) }],
+      ['d7', 'Lekkasjesensor', 'kitchen', 'sensor', { alarm_water: cap(false), measure_temperature: cap(19.8, { units: '°C' }) }],
+      ['d8', 'Ytterdør', 'hall', 'lock', { locked: cap(true) }],
+      ['d9', 'Dørsensor', 'hall', 'sensor', { alarm_contact: cap(false) }],
+      ['d10', 'Bevegelse', 'hall', 'sensor', { alarm_motion: cap(false), measure_luminance: cap(42, { units: 'lx' }) }],
+      ['d11', 'Nattbordlampe', 'bedroom', 'light', { onoff: cap(false), dim: cap(0.3) }],
+      ['d12', 'Rullegardin', 'bedroom', 'windowcoverings', { windowcoverings_set: cap(0.6), windowcoverings_state: cap('idle') }],
+      ['d13', 'Klima', 'bedroom', 'sensor', { measure_temperature: cap(18.9, { units: '°C' }), measure_humidity: cap(46, { units: '%' }) }],
+      ['d14', 'Skrivebordslampe', 'office', 'light', { onoff: cap(true), dim: cap(0.85) }],
+      ['d15', 'Vindu', 'office', 'sensor', { alarm_contact: cap(true) }],
+      ['d16', 'Varmekabler', 'bath', 'thermostat', { measure_temperature: cap(23.1, { units: '°C' }), target_temperature: cap(24, { units: '°C', min: 5, max: 35, step: 0.5 }), onoff: cap(true) }],
+      ['d17', 'Strømmåler', 'home', 'sensor', { measure_power: cap(1840, { units: 'W' }) }],
+      ['d18', 'Roborock S8', 'living', 'vacuumcleaner', { vacuumcleaner_state: cap('cleaning', { setable: true }), measure_battery: cap(78, { units: '%' }) }],
+      ['d19', 'Tømmekalender', 'home', 'other', {
+        next_rest: cap(inDays(1), { title: 'Restavfall' }),
+        next_paper: cap(inDays(4), { title: 'Papp og papir' }),
+        next_plastic: cap(inDays(9), { title: 'Plastemballasje' }),
+        days_glass: cap(17, { title: 'Glass og metall', units: 'dager' })
+      }]
     ];
     var out = {};
     list.forEach(function (r) {
       out[r[0]] = { id: r[0], name: r[1], zone: r[2], class: r[3], available: true, capabilities: Object.keys(r[4]), capabilitiesObj: r[4] };
     });
     out.d17.energyObj = { cumulative: true };   // behaves like a P1 / HAN whole-home meter
+    out.d18.driverId = 'homey:app:com.roborock.roborock:vacuum';
+    out.d19.driverId = 'homey:app:no.renovasjon:renovasjon';
     return out;
   }
 
@@ -70,13 +80,13 @@
 
   DemoBackend.prototype.zones = function () {
     return Promise.resolve({
-      home: { id: 'home', name: 'Home', parent: null },
-      living: { id: 'living', name: 'Living room', parent: 'home' },
-      kitchen: { id: 'kitchen', name: 'Kitchen', parent: 'home' },
-      hall: { id: 'hall', name: 'Hallway', parent: 'home' },
-      bedroom: { id: 'bedroom', name: 'Bedroom', parent: 'home' },
-      office: { id: 'office', name: 'Office', parent: 'home' },
-      bath: { id: 'bath', name: 'Bathroom', parent: 'home' }
+      home: { id: 'home', name: 'Hjemme', parent: null },
+      living: { id: 'living', name: 'Stue', parent: 'home' },
+      kitchen: { id: 'kitchen', name: 'Kjøkken', parent: 'home' },
+      hall: { id: 'hall', name: 'Gang', parent: 'home' },
+      bedroom: { id: 'bedroom', name: 'Soverom', parent: 'home' },
+      office: { id: 'office', name: 'Kontor', parent: 'home' },
+      bath: { id: 'bath', name: 'Bad', parent: 'home' }
     });
   };
 
@@ -84,11 +94,11 @@
 
   DemoBackend.prototype.flows = function () {
     return Promise.resolve([
-      { id: 'f1', name: 'Good morning', type: 'basic' },
-      { id: 'f2', name: 'Leaving home', type: 'advanced' },
-      { id: 'f3', name: 'Dinner', type: 'basic' },
-      { id: 'f4', name: 'Movie time', type: 'advanced' },
-      { id: 'f5', name: 'Good night', type: 'basic' }
+      { id: 'f1', name: 'God morgen', type: 'basic' },
+      { id: 'f2', name: 'Går ut', type: 'advanced' },
+      { id: 'f3', name: 'Middag', type: 'basic' },
+      { id: 'f4', name: 'Filmkveld', type: 'advanced' },
+      { id: 'f5', name: 'God natt', type: 'basic' }
     ]);
   };
 
@@ -96,13 +106,12 @@
     return Promise.resolve([
       { id: 'u1', name: 'Sam', present: true, asleep: false },
       { id: 'u2', name: 'Robin', present: false, asleep: false },
-      { id: 'u3', name: 'Kit', present: true, asleep: true }
+      { id: 'u3', name: 'Kim', present: true, asleep: true }
     ]);
   };
 
-  DemoBackend.prototype.weather = function () {
-    return Promise.resolve({ temperature: 7.2, state: 'Clouds' });
-  };
+  DemoBackend.prototype.weather = function () { return Promise.resolve({ temperature: 7.2, state: 'Clouds' }); };
+  DemoBackend.prototype.location = function () { return Promise.resolve({ lat: 59.913, lon: 10.739, name: 'Oslo' }); };
 
   DemoBackend.prototype.setCapability = function (id, capId, value) {
     var self = this;
@@ -113,6 +122,9 @@
         if (capId === 'windowcoverings_state' && value !== 'idle') {
           self._emit(id, 'windowcoverings_set', value === 'up' ? 1 : 0);
           setTimeout(function () { self._emit(id, 'windowcoverings_state', 'idle'); }, 1500);
+        }
+        if (capId === 'vacuumcleaner_state' && value === 'docked') {
+          setTimeout(function () { self._emit(id, 'vacuumcleaner_state', 'charging'); }, 2000);
         }
         resolve();
       }, 150);
