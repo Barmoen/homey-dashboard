@@ -56,7 +56,7 @@ svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width:
 .m-item svg { width: 18px; height: 18px; color: var(--faint); }
 
 /* ---------- Centre: status sentence + weather ---------- */
-.center { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 44px; align-items: center; }
+.center { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 44px; align-items: center; }
 .status { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 0 4px; min-width: 0; }
 .s-greet { font-size: 18px; color: var(--muted); }
 .s-line { font-size: 32px; font-weight: 300; line-height: 1.3; letter-spacing: -.4px; }
@@ -297,6 +297,24 @@ input[type=range].temp::-webkit-slider-thumb { box-shadow: -800px 0 0 794px var(
 /* ---------- Toast ---------- */
 .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: #2a2f3a; border: 1px solid var(--line); color: var(--text); padding: 14px 20px; border-radius: 14px; z-index: 50; font-size: 15px; max-width: 90vw; animation: rise .2s; }
 .toast.err { background: #3a1f1c; border-color: #6b2f2a; }
+
+/* ---------- Auto-fit: applied by app.js when the centre would overflow ---------- */
+body.fit-1 .clock .time { font-size: 80px; letter-spacing: -3px; }
+body.fit-1 .clock .date { margin-top: 6px; }
+body.fit-1 #app { gap: 10px; }
+body.fit-1 .sc-icon { width: 60px; height: 60px; }
+body.fit-1 .sc-icon svg { width: 24px; height: 24px; }
+body.fit-1 .wx { padding: 16px 20px 14px; }
+body.fit-1 .wx-temp { font-size: 52px; }
+body.fit-1 .wx-now > svg { width: 52px; height: 52px; }
+body.fit-1 .wx-outlook { margin: 10px 0; }
+body.fit-1 .i-card { padding-top: 8px; padding-bottom: 8px; }
+body.fit-1 .room-pill { height: 50px; }
+body.fit-2 .wx-hours { display: none; }
+body.fit-2 .wx-outlook { margin-bottom: 0; }
+body.fit-2 .s-line { font-size: 26px; }
+body.fit-3 .s-greet, body.fit-3 .s-calm { display: none; }
+body.fit-3 .sc-name { display: none; }
 
 /* ---------- Portrait / small ---------- */
 @media (max-width: 860px) {

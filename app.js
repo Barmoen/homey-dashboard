@@ -765,6 +765,7 @@
     }).join('') + '</div>';
     el.innerHTML = h;
     renderSaverSub();
+    fitLayout();
   }
 
   // ---- the status sentence
@@ -899,7 +900,7 @@
     el.classList.toggle('fits', el.scrollWidth <= el.clientWidth + 1);
   }
 
-  function renderChips() { renderStatus(); renderRoomBar(); renderMeta(); renderStrip(); if (openRoomId && !listOpen()) renderRoomHead(); }
+  function renderChips() { renderStatus(); renderRoomBar(); renderMeta(); renderStrip(); if (openRoomId && !listOpen()) renderRoomHead(); fitLayout(); }
 
   // ---- room panel (slides up with the room's device tiles)
   var openRoomId = null, showRoomLabel = false;
@@ -1022,7 +1023,21 @@
     }).join('');
   }
 
-  function renderAll() { renderPresence(); renderScenes(); renderChips(); renderWeather(); renderStrip(); renderRooms(); }
+  function renderAll() { renderPresence(); renderScenes(); renderChips(); renderWeather(); renderStrip(); renderRooms(); fitLayout(); }
+
+  // ---- make everything fit on screen: shrink step by step instead of letting the centre overlap the buttons
+  var fitQueued = false;
+  function fitLayout() {
+    if (fitQueued) return;
+    fitQueued = true;
+    requestAnimationFrame(function () {
+      fitQueued = false;
+      var b = document.body, c = document.querySelector('.center');
+      if (!c) return;
+      b.classList.remove('fit-1', 'fit-2', 'fit-3');
+      for (var lvl = 1; lvl <= 3 && c.scrollHeight > c.clientHeight + 2; lvl++) b.classList.add('fit-' + lvl);
+    });
+  }
 
   // ---------------------------------------------------------------- clock
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -1674,7 +1689,7 @@
     }
   });
   // Re-check whether the room pills overflow after rotating the iPad.
-  window.addEventListener('resize', function () { if (backend) renderRoomBar(); });
+  window.addEventListener('resize', function () { if (backend) renderRoomBar(); fitLayout(); });
 
   ['pointerdown', 'keydown'].forEach(function (ev) { document.addEventListener(ev, activity, { capture: true, passive: true }); });
 
